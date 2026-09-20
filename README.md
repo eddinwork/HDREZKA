@@ -24,6 +24,8 @@
 - Windows 10 версии 19041+ / Windows 11, x64
 - Отдельная установка Windows App SDK **не требуется** (self-contained сборка)
 
+## Группа в Telegram: https://t.me/hdrezkawin
+
 ## Установка
 
 1. Скачайте `HDREZKA-Setup-1.1.2.exe` из раздела [Releases](../../releases).
