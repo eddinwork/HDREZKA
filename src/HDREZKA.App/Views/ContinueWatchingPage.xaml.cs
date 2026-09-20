@@ -70,7 +70,9 @@ public sealed partial class ContinueWatchingPage : Page
             (title.Contains("test", StringComparison.OrdinalIgnoreCase)
              || title.Contains("тест", StringComparison.OrdinalIgnoreCase)));
 
-    private static ContinueItem FromLocal(WatchPosition p)
+    internal static bool IsLocalTestEntry(string movieId, string? title) => IsTestEntry(movieId, title);
+
+    internal static ContinueItem FromLocal(WatchPosition p)
     {
         var remainingMin = (int)Math.Max(1, (p.DurationSeconds - p.PositionSeconds) / 60);
         var subtitle = p.SeasonId != null && p.EpisodeId != null
@@ -85,7 +87,12 @@ public sealed partial class ContinueWatchingPage : Page
             PositionSeconds: p.PositionSeconds,
             DurationSeconds: p.DurationSeconds,
             Info: Loc.Get("Continue.Left", remainingMin),
-            UpdatedAt: p.UpdatedAt);
+            UpdatedAt: p.UpdatedAt,
+            IsWatched: PositionService.Instance.IsWatched(p.MovieId, p.TranslatorId, p.SeasonId, p.EpisodeId),
+            MovieKey: p.MovieId,
+            TranslatorKey: p.TranslatorId,
+            SeasonKey: p.SeasonId,
+            EpisodeKey: p.EpisodeId);
     }
 
     private async void LoadFromAccount()
@@ -129,7 +136,11 @@ public sealed partial class ContinueWatchingPage : Page
                     ActionLabel: item.ActionLabel,
                     DataId: item.DataId,
                     IsWatched: item.Watched,
-                    UpdatedAt: match?.UpdatedAt));
+                    UpdatedAt: match?.UpdatedAt,
+                    MovieKey: match?.MovieId,
+                    TranslatorKey: match?.TranslatorId,
+                    SeasonKey: match?.SeasonId,
+                    EpisodeKey: match?.EpisodeId));
             }
 
             // drop stale local duplicates that are now tracked by the account
@@ -169,7 +180,54 @@ public sealed partial class ContinueWatchingPage : Page
             IsHitTestVisible = true,
         };
         card.DeleteRequested += OnDeleteRequested;
+        card.WatchedToggled += OnWatchedToggled;
         return card;
+    }
+
+    /// <summary>
+    /// Flips the watched checkmark. Account entries toggle the server flag,
+    /// local entries toggle the offline key. Returns the updated item,
+    /// or null on error / missing key. Must be called on the UI thread.
+    /// </summary>
+    internal static async Task<ContinueItem?> ToggleWatchedAsync(ContinueItem item, Microsoft.UI.Xaml.XamlRoot? xamlRoot)
+    {
+        if (!string.IsNullOrEmpty(item.DataId))
+        {
+            try
+            {
+                await RezkaService.Instance.Client.MarkWatchedItemAsync(item.DataId);
+                return item with { IsWatched = !item.IsWatched };
+            }
+            catch (RezkaException ex)
+            {
+                if (xamlRoot != null)
+                {
+                    var dialog = new ContentDialog
+                    {
+                        Title = Loc.Get("Common.Error"),
+                        Content = RezkaService.Instance.ErrorText(ex),
+                        CloseButtonText = "OK",
+                        XamlRoot = xamlRoot,
+                    };
+                    await dialog.ShowAsync();
+                }
+
+                return null;
+            }
+        }
+
+        if (item.MovieKey == null || item.TranslatorKey == null) return null;
+        var now = PositionService.Instance.ToggleWatched(item.MovieKey, item.TranslatorKey, item.SeasonKey, item.EpisodeKey);
+        return item with { IsWatched = now };
+    }
+
+    private async void OnWatchedToggled(object? sender, ContinueItem item)
+    {
+        var updated = await ToggleWatchedAsync(item, Content.XamlRoot);
+        if (updated == null) return;
+        var idx = _items.IndexOf(item);
+        if (idx >= 0) _items[idx] = updated;
+        RenderList();
     }
 
     private void ShowError(string message)

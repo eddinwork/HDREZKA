@@ -42,6 +42,9 @@ public sealed partial class AccountPage : Page
     {
         LoginPromptText.Text = Loc.Get("Account.LoginTitle");
         LoginButton.Content = Loc.Get("Common.Login");
+        RegisterLink.Content = Loc.Get("Account.Register");
+        PremiumLink.Content = Loc.Get("Account.Premium");
+        PremiumLinkLoggedIn.Content = Loc.Get("Account.Premium");
         BookmarksButton.Content = Loc.Get("Account.Bookmarks");
         HistoryButton.Content = Loc.Get("Nav.Continue");
         LogoutButton.Content = Loc.Get("Common.Logout");
@@ -111,6 +114,16 @@ public sealed partial class AccountPage : Page
             XamlRoot = Content.XamlRoot,
         };
         await dialog.ShowAsync();
+    }
+
+    private async void RegisterLink_Click(object sender, RoutedEventArgs e)
+    {
+        await SiteLinks.OpenAsync(SiteLinks.RegisterUri);
+    }
+
+    private async void PremiumLink_Click(object sender, RoutedEventArgs e)
+    {
+        await SiteLinks.OpenAsync(SiteLinks.PaymentsUri);
     }
 
     private void BookmarksButton_Click(object sender, RoutedEventArgs e)

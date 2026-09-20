@@ -21,6 +21,11 @@ public sealed class SettingsService
     };
 
     public string Mirror { get; set; } = "https://hdrzk.org/";
+
+    /// <summary>First-launch mirror autopick already performed.</summary>
+    public bool MirrorAutoPicked { get; set; }
+
+    public DateTime LastMirrorCheckUtc { get; set; }
     public AppLanguage Language { get; set; } = AppLanguage.Ru;
     public AppTheme Theme { get; set; } = AppTheme.System;
     public string DefaultQuality { get; set; } = "1080p";
@@ -67,6 +72,8 @@ public sealed class SettingsService
             var loaded = JsonSerializer.Deserialize<SettingsService>(json, JsonOpts);
             if (loaded == null) return;
             Mirror = loaded.Mirror;
+            MirrorAutoPicked = loaded.MirrorAutoPicked;
+            LastMirrorCheckUtc = loaded.LastMirrorCheckUtc;
             Language = loaded.Language;
             Theme = loaded.Theme;
             DefaultQuality = loaded.DefaultQuality;

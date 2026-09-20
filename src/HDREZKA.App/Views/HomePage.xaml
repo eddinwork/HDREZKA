@@ -90,6 +90,28 @@
                                 HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,20,16"/>
                 </Grid>
 
+                <StackPanel x:Name="ContinueSection" Spacing="0" Margin="0,8,0,0" Visibility="Collapsed">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="ContinueHeader" Style="{StaticResource RowHeaderText}"/>
+                        <Button x:Name="ContinueAllButton" Grid.Column="1" Click="ContinueAll_Click"
+                                VerticalAlignment="Bottom" Margin="0,0,0,10"
+                                Background="Transparent" BorderThickness="0" Padding="8,4">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock x:Name="ContinueAllText" FontSize="13"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <FontIcon Glyph="&#xE76C;" FontSize="12"
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <StackPanel x:Name="ContinueRow" Orientation="Horizontal" Spacing="0"/>
+                </StackPanel>
+
                 <StackPanel x:Name="FilmsSection" Spacing="0" Margin="0,8,0,0">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -244,7 +266,10 @@
         <StackPanel x:Name="ErrorPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Visibility="Collapsed">
             <FontIcon Glyph="&#xE783;" FontSize="36" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
             <TextBlock x:Name="ErrorText" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"/>
-            <Button x:Name="RetryButton" Click="RetryButton_Click" HorizontalAlignment="Center" Style="{ThemeResource AccentButtonStyle}"/>
+            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                <Button x:Name="RetryButton" Click="RetryButton_Click" Style="{ThemeResource AccentButtonStyle}"/>
+                <Button x:Name="MirrorButton" Click="MirrorButton_Click" Visibility="Collapsed"/>
+            </StackPanel>
         </StackPanel>
     </Grid>
 </Page>

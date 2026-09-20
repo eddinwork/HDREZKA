@@ -17,6 +17,18 @@ public sealed class RezkaService
             Mirror = SettingsService.Instance.Mirror,
             UseAndroidHeaders = SettingsService.Instance.UseAndroidHeaders,
         });
+        // Persist auto-flipped value so next launch uses the working variant.
+        Client.HeadersFlipped += () =>
+        {
+            try
+            {
+                SettingsService.Instance.UseAndroidHeaders = Client.Options.UseAndroidHeaders;
+                SettingsService.Instance.Save();
+            }
+            catch
+            {
+            }
+        };
     }
 
     public bool IsLoggedIn => Client.IsLoggedIn;

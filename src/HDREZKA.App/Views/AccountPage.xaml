@@ -38,12 +38,17 @@
             <FontIcon Glyph="&#xE77B;" FontSize="48" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
             <TextBlock x:Name="LoginPromptText" FontSize="18" TextAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="360"/>
             <Button x:Name="LoginButton" Click="LoginButton_Click" Style="{ThemeResource AccentButtonStyle}" MinWidth="200"/>
+            <StackPanel Orientation="Horizontal" Spacing="16" HorizontalAlignment="Center">
+                <HyperlinkButton x:Name="RegisterLink" Click="RegisterLink_Click" Padding="0"/>
+                <HyperlinkButton x:Name="PremiumLink" Click="PremiumLink_Click" Padding="0"/>
+            </StackPanel>
         </StackPanel>
 
         <!-- Account actions -->
         <StackPanel x:Name="ActionsPanel" Grid.Row="1" Orientation="Horizontal" Spacing="12" Visibility="Collapsed">
             <Button x:Name="BookmarksButton" Click="BookmarksButton_Click" Style="{ThemeResource AccentButtonStyle}"/>
             <Button x:Name="HistoryButton" Click="HistoryButton_Click" Style="{ThemeResource AccentButtonStyle}"/>
+            <HyperlinkButton x:Name="PremiumLinkLoggedIn" Click="PremiumLink_Click" VerticalAlignment="Center"/>
             <Button x:Name="LogoutButton" Click="LogoutButton_Click"/>
         </StackPanel>
 

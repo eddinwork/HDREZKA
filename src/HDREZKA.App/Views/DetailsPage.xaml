@@ -76,6 +76,12 @@
                             <TextBlock x:Name="BookmarkText"/>
                         </StackPanel>
                     </Button>
+                    <ToggleButton x:Name="WatchedButton" Click="WatchedButton_Click" MinHeight="40">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE73E;" FontSize="16"/>
+                            <TextBlock x:Name="WatchedText"/>
+                        </StackPanel>
+                    </ToggleButton>
                 </StackPanel>
 
                 <StackPanel x:Name="CommentsSection" Spacing="10" Margin="0,20,0,0" Visibility="Collapsed">

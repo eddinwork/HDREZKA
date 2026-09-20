@@ -22,14 +22,17 @@ public sealed class PositionService
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "HDREZKA");
 
     private static readonly string FilePath = Path.Combine(Dir, "positions.json");
+    private static readonly string WatchedFilePath = Path.Combine(Dir, "watched.json");
 
     public static PositionService Instance { get; } = new();
 
     private Dictionary<string, WatchPosition> _positions = new();
+    private HashSet<string> _watched = new();
 
     private PositionService()
     {
         Load();
+        LoadWatched();
     }
 
     private static string Key(string movieId, string translatorId, string? season, string? episode) =>
@@ -60,13 +63,74 @@ public sealed class PositionService
             .Where(kv => kv.Value.MovieId == movieId || kv.Value.PagePath == movieId)
             .Select(kv => kv.Key)
             .ToList();
-        if (keys.Count == 0) return;
         foreach (var key in keys)
         {
             _positions.Remove(key);
         }
 
-        Persist();
+        if (keys.Count > 0) Persist();
+
+        // Drop manual "watched" checkmarks for the same title.
+        var watchedKeys = _watched
+            .Where(k => k.Split('|')[0] == movieId)
+            .ToList();
+        if (watchedKeys.Count > 0)
+        {
+            foreach (var key in watchedKeys) _watched.Remove(key);
+            PersistWatched();
+        }
+    }
+
+    // ---------- manual "watched" checkmarks (offline, per voice/season/episode) ----------
+
+    public bool IsWatched(string movieId, string translatorId, string? season, string? episode) =>
+        _watched.Contains(Key(movieId, translatorId, season, episode));
+
+    /// <returns>New state.</returns>
+    public bool ToggleWatched(string movieId, string translatorId, string? season, string? episode)
+    {
+        var key = Key(movieId, translatorId, season, episode);
+        bool now;
+        if (_watched.Contains(key))
+        {
+            _watched.Remove(key);
+            now = false;
+        }
+        else
+        {
+            _watched.Add(key);
+            now = true;
+        }
+
+        PersistWatched();
+        return now;
+    }
+
+    private void LoadWatched()
+    {
+        try
+        {
+            if (!File.Exists(WatchedFilePath)) return;
+            var json = File.ReadAllText(WatchedFilePath);
+            _watched = JsonSerializer.Deserialize<HashSet<string>>(json) ?? new();
+        }
+        catch
+        {
+            _watched = new();
+        }
+    }
+
+    private void PersistWatched()
+    {
+        try
+        {
+            Directory.CreateDirectory(Dir);
+            File.WriteAllText(WatchedFilePath, JsonSerializer.Serialize(_watched));
+        }
+        catch
+        {
+            // best effort
+        }
     }
 
     private void Load()

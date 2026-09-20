@@ -1,0 +1,12 @@
+{
+  "updated": "2026-09-20",
+  "mirrors": [
+    { "url": "https://hdrzk.org/", "region": "ALL", "note": "default" },
+    { "url": "https://rezka.ag/", "region": "ALL", "note": "main" },
+    { "url": "https://hdrezka.ag/", "region": "ALL", "note": "main alt" },
+    { "url": "https://hdrezka.me/", "region": "ALL", "note": "alt" },
+    { "url": "https://rezkify.com/", "region": "ALL", "note": "alt" },
+    { "url": "https://rezka-kz.tv/", "region": "KZ", "note": "kazakhstan" },
+    { "url": "https://rezka-ua.net/", "region": "UA", "note": "ukraine" }
+  ]
+}

@@ -187,6 +187,7 @@ public sealed partial class PlayerPage : Page
         BufferingText.Text = Loc.Get("Player.Buffering");
         ToolTipService.SetToolTip(FullscreenButton, Loc.Get("Player.Fullscreen"));
         ToolTipService.SetToolTip(ZoomButton, Loc.Get("Player.Zoom"));
+        ToolTipService.SetToolTip(ExternalButton, Loc.Get("Player.External"));
     }
 
     private void ApplySpeed()
@@ -434,6 +435,40 @@ public sealed partial class PlayerPage : Page
     {
         ReturnFocus();
         ToggleFullscreen();
+    }
+
+    private async void ExternalButton_Click(object sender, RoutedEventArgs e)
+    {
+        ReturnFocus();
+        var url = _video?.Videos.FirstOrDefault(v => v.Quality == _quality)?.Urls.FirstOrDefault()
+            ?? _video?.GetMaxQuality()?.Urls.FirstOrDefault();
+        if (string.IsNullOrEmpty(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            ShowStatus(Loc.Get("Details.NoVideo"));
+            return;
+        }
+
+        // Copy link so user can paste it into VLC/mpv/Browser manually.
+        try
+        {
+            var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            package.SetText(uri.ToString());
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+
+        try
+        {
+            await Windows.System.Launcher.LaunchUriAsync(uri);
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+            ShowStatus(Loc.Get("Player.ExternalFail"));
+        }
     }
 
     private async void QualityBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -963,6 +998,8 @@ public sealed partial class PlayerPage : Page
 
     private void ShowControls()
     {
+        TopBar.IsHitTestVisible = true;
+        BottomBar.IsHitTestVisible = true;
         FadeElement(TopBar, show: true);
         FadeElement(BottomBar, show: true);
         if (!IsPlaying()) return;
@@ -975,6 +1012,9 @@ public sealed partial class PlayerPage : Page
         _hideTimer.Stop();
         FadeElement(TopBar, show: false);
         FadeElement(BottomBar, show: false);
+        // Invisible bars must not swallow taps: TapCatcher below handles them.
+        TopBar.IsHitTestVisible = false;
+        BottomBar.IsHitTestVisible = false;
     }
 
     private void ToggleFullscreen()
@@ -1031,6 +1071,8 @@ public sealed partial class PlayerPage : Page
 
             _isFullscreen = true;
             FullscreenIcon.Glyph = "\uE73F";
+            // Give immediate UI feedback + restart the auto-hide timer.
+            try { ShowControls(); } catch { }
         }
         else
         {
@@ -1058,6 +1100,9 @@ public sealed partial class PlayerPage : Page
                 appWindow.SetPresenter(Microsoft.UI.Windowing.AppWindowPresenterKind.Overlapped);
             }
 
+            // Re-fetch: SetPresenter creates a new presenter instance.
+            // Without restoring border+titlebar the system caption buttons
+            // ( _, □, X ) stay hidden and the top bar layout breaks.
             if (appWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter overlapped)
             {
                 overlapped.SetBorderAndTitleBar(true, true);
@@ -1067,8 +1112,7 @@ public sealed partial class PlayerPage : Page
             var b = _savedBounds;
             if (b.Width > 0 && b.Height > 0) appWindow.MoveAndResize(b);
 
-            // NOTE: separate player window uses the default system title bar,
-            // so there is nothing to restore here.
+            try { window.Activate(); } catch { }
 
             App.TryLog(new Exception($"[Player] FS off: kind={appWindow.Presenter.Kind} bounds={appWindow.Size.Width}x{appWindow.Size.Height}"));
         }
@@ -1076,6 +1120,13 @@ public sealed partial class PlayerPage : Page
         {
             App.TryLog(ex);
             try { appWindow.SetPresenter(Microsoft.UI.Windowing.AppWindowPresenterKind.Overlapped); } catch { }
+        }
+        finally
+        {
+            // Controls may have auto-hidden while fullscreen (opacity 0):
+            // exiting via keyboard/button produces no pointer move,
+            // so bring the top bar (back/title/quality) back explicitly.
+            try { ShowControls(); } catch { }
         }
     }
 

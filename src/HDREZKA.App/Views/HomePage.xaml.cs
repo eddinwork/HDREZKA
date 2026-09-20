@@ -1,3 +1,4 @@
+using HDREZKA.App.Controls;
 using HDREZKA.App.Services;
 using HDREZKA.Core.Api;
 using Microsoft.UI.Xaml;
@@ -11,6 +12,7 @@ public sealed partial class HomePage : Page
 {
     private const int SectionPreviewCount = 12;
     private const int HeroCount = 5;
+    private const int HomeContinueCount = 3;
 
     private bool _loaded;
     private readonly List<MovieSimple> _heroItems = new();
@@ -48,6 +50,7 @@ public sealed partial class HomePage : Page
 
         ApplyHeroMetrics();
         SettingsService.Instance.PosterSizeChanged += OnPosterSizeChanged;
+        RenderContinue();
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -70,14 +73,20 @@ public sealed partial class HomePage : Page
 
     private void OnLanguageChanged()
     {
-        DispatcherQueue.TryEnqueue(ApplyLocalization);
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            ApplyLocalization();
+            RenderContinue();
+        });
     }
 
     private void ApplyLocalization()
     {
         LoadingText.Text = Loc.Get("Common.Loading");
         RetryButton.Content = Loc.Get("Common.Retry");
+        MirrorButton.Content = Loc.Get("Settings.AutoMirror");
         HeroWatchButton.Content = Loc.Get("Common.Watch");
+        ContinueHeader.Text = Loc.Get("Continue.Home");
         FilmsHeader.Text = Loc.Get("Section.Films") + " — " + Loc.Get("Filter.Latest");
         SeriesHeader.Text = Loc.Get("Section.Series") + " — " + Loc.Get("Filter.Latest");
         CartoonsHeader.Text = Loc.Get("Section.Cartoons") + " — " + Loc.Get("Filter.Latest");
@@ -92,6 +101,7 @@ public sealed partial class HomePage : Page
         PopularAllText.Text = showAll;
         WatchingAllText.Text = showAll;
         SoonAllText.Text = showAll;
+        ContinueAllText.Text = showAll;
     }
 
     private async void Load()
@@ -124,7 +134,8 @@ public sealed partial class HomePage : Page
         }
         catch (RezkaException ex)
         {
-            ShowError(RezkaService.Instance.ErrorText(ex));
+            ShowError(RezkaService.Instance.ErrorText(ex),
+                ex.Kind is RezkaError.MirrorBanned or RezkaError.AccessDenied);
         }
     }
 
@@ -267,6 +278,56 @@ public sealed partial class HomePage : Page
         section.Visibility = preview.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    /// <summary>
+    /// Local "continue watching" row: top-N positions from the app itself,
+    /// no server requests. Refreshed on every navigation to Home.
+    /// </summary>
+    private void RenderContinue()
+    {
+        ContinueRow.Children.Clear();
+
+        var items = PositionService.Instance.GetAll()
+            .Where(p => !ContinueWatchingPage.IsLocalTestEntry(p.MovieId, p.Title))
+            .Take(HomeContinueCount)
+            .Select(ContinueWatchingPage.FromLocal)
+            .ToList();
+
+        foreach (var item in items)
+        {
+            var card = new ContinueCard
+            {
+                Data = item,
+                Margin = new Thickness(0, 0, 18, 26),
+                IsHitTestVisible = true,
+            };
+            card.DeleteRequested += OnHomeContinueDeleteRequested;
+            card.WatchedToggled += OnHomeContinueWatchedToggled;
+            ContinueRow.Children.Add(card);
+        }
+
+        ContinueSection.Visibility = items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnHomeContinueDeleteRequested(object? sender, ContinueItem item)
+    {
+        PositionService.Instance.Remove(item.Id);
+        RenderContinue();
+    }
+
+    private async void OnHomeContinueWatchedToggled(object? sender, ContinueItem item)
+    {
+        // Home row is local-only: just flip the offline key and re-read.
+        if (await ContinueWatchingPage.ToggleWatchedAsync(item, Content.XamlRoot) != null)
+        {
+            RenderContinue();
+        }
+    }
+
+    private void ContinueAll_Click(object sender, RoutedEventArgs e)
+    {
+        Nav.Go<ContinueWatchingPage>();
+    }
+
     private void HeroWatchButton_Click(object sender, RoutedEventArgs e)
     {
         if (_heroItems.Count > 0)
@@ -342,12 +403,31 @@ public sealed partial class HomePage : Page
         }
     }
 
-    private void ShowError(string message)
+    private void ShowError(string message, bool showMirrorButton = false)
     {
         LoadingPanel.Visibility = Visibility.Collapsed;
         ErrorPanel.Visibility = Visibility.Visible;
         ErrorText.Text = message;
+        MirrorButton.Visibility = showMirrorButton ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void RetryButton_Click(object sender, RoutedEventArgs e) => Load();
+
+    private async void MirrorButton_Click(object sender, RoutedEventArgs e)
+    {
+        MirrorButton.IsEnabled = false;
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            var applied = await MirrorService.PickAndApplyAsync(Content.XamlRoot, DispatcherQueue, cts.Token);
+            if (applied != null) Load();
+        }
+        catch
+        {
+        }
+        finally
+        {
+            MirrorButton.IsEnabled = true;
+        }
+    }
 }

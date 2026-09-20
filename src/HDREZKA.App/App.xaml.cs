@@ -57,5 +57,8 @@ public partial class App : Application
 
         // Update check on every launch (notifies at most once per version).
         _ = Services.UpdateService.CheckAndNotifyAsync(MainWindow);
+
+        // First-launch mirror autopick (silent, skips logged-in sessions).
+        _ = Services.MirrorService.AutoPickOnStartupAsync();
     }
 }

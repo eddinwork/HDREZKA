@@ -19,6 +19,13 @@ public sealed class RezkaClient
 
     public RezkaClientOptions Options { get; private set; }
 
+    /// <summary>
+    /// Raised when <see cref="Options.UseAndroidHeaders"/> was auto-toggled
+    /// after a 403 (ported from the mac client which retries once with
+    /// flipped headers). UI layer should persist the working value.
+    /// </summary>
+    public event Action? HeadersFlipped;
+
     public RezkaClient(RezkaClientOptions? options = null)
     {
         Options = options ?? new RezkaClientOptions();
@@ -212,11 +219,19 @@ public sealed class RezkaClient
     private static Task BackoffDelay(int attempt, CancellationToken ct) =>
         Task.Delay(400 * attempt + Random.Shared.Next(200), ct);
 
+    private void FlipHeadersForRetry()
+    {
+        Options.UseAndroidHeaders = !Options.UseAndroidHeaders;
+        ApplyHeaders();
+        try { HeadersFlipped?.Invoke(); } catch { }
+    }
+
     private async Task<string> GetStringAsync(string pathAndQuery, CancellationToken ct)
     {
         await _requestGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            var flipped = false;
             for (var attempt = 1; ; attempt++)
             {
                 try
@@ -224,6 +239,16 @@ public sealed class RezkaClient
                     using var resp = await _http.GetAsync(pathAndQuery, ct).ConfigureAwait(false);
                     if (resp.StatusCode == HttpStatusCode.Forbidden)
                     {
+                        // Port of mac CustomInterceptor: one retry with flipped
+                        // X-Hdrezka-Android-App headers — some mirrors/WAFs
+                        // accept only one of the two variants.
+                        if (!flipped)
+                        {
+                            flipped = true;
+                            FlipHeadersForRetry();
+                            continue;
+                        }
+
                         throw IsLoggedIn
                             ? RezkaException.LoginRequired()
                             : RezkaException.AccessDenied();
@@ -264,6 +289,7 @@ public sealed class RezkaClient
         await _requestGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            var flipped = false;
             for (var attempt = 1; ; attempt++)
             {
                 try
@@ -273,6 +299,14 @@ public sealed class RezkaClient
                     using var resp = await _http.PostAsync(pathAndQuery, content, ct).ConfigureAwait(false);
                     if (resp.StatusCode == HttpStatusCode.Forbidden)
                     {
+                        // Same 403-flip retry as GET (covers ajax/login/).
+                        if (!flipped)
+                        {
+                            flipped = true;
+                            FlipHeadersForRetry();
+                            continue;
+                        }
+
                         throw IsLoggedIn
                             ? RezkaException.LoginRequired()
                             : RezkaException.AccessDenied();

@@ -12,5 +12,9 @@
         <TextBox x:Name="LoginBox" TextChanged="Fields_Changed"/>
         <PasswordBox x:Name="PasswordBox" PasswordChanged="Fields_Changed"/>
         <TextBlock x:Name="ErrorText" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap"/>
+        <StackPanel Orientation="Horizontal" Spacing="16" HorizontalAlignment="Center">
+            <HyperlinkButton x:Name="RegisterLink" Click="RegisterLink_Click" Padding="0"/>
+            <HyperlinkButton x:Name="PremiumLink" Click="PremiumLink_Click" Padding="0"/>
+        </StackPanel>
     </StackPanel>
 </ContentDialog>

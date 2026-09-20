@@ -96,6 +96,7 @@ public sealed partial class SettingsPage : Page
         PosterSizeHeader.Text = Loc.Get("Settings.PosterSize");
         HeadersHeader.Text = Loc.Get("Settings.Headers");
         HeadersHint.Text = Loc.Get("Settings.HeadersHint");
+        AutoMirrorButton.Content = Loc.Get("Settings.AutoMirror");
         DonateHeader.Text = Loc.Get("Settings.Donate");
         DonateHint.Text = Loc.Get("Settings.DonateHint");
         DonateCopyButton.Content = Loc.Get("Common.Copy");
@@ -197,8 +198,38 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private async void CheckUpdatesButton_Click(object sender, RoutedEventArgs e)
+    private async void AutoMirrorButton_Click(object sender, RoutedEventArgs e)
     {
+        AutoMirrorButton.IsEnabled = false;
+        MirrorStatusText.Text = Loc.Get("Settings.MirrorChecking");
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            var before = SettingsService.Instance.Mirror;
+            var applied = await MirrorService.PickAndApplyAsync(Content.XamlRoot, DispatcherQueue, cts.Token);
+            if (applied == null)
+            {
+                MirrorStatusText.Text = Loc.Get("Settings.MirrorNoneFound");
+            }
+            else
+            {
+                MirrorBox.Text = SettingsService.Instance.Mirror;
+                MirrorStatusText.Text = string.Equals(applied, before, StringComparison.OrdinalIgnoreCase)
+                    ? Loc.Get("Settings.MirrorSame")
+                    : Loc.Get("Settings.MirrorFound", applied);
+            }
+        }
+        catch
+        {
+            MirrorStatusText.Text = Loc.Get("Settings.MirrorNoneFound");
+        }
+        finally
+        {
+            AutoMirrorButton.IsEnabled = true;
+        }
+    }
+
+    private async void CheckUpdatesButton_Click(object sender, RoutedEventArgs e)    {
         CheckUpdatesButton.IsEnabled = false;
         UpdateStatusText.Text = Loc.Get("Settings.Checking");
         try

@@ -22,6 +22,8 @@ public sealed partial class LoginDialog : ContentDialog
         CloseButtonText = Loc.Get("Common.Cancel");
         LoginBox.Header = Loc.Get("Common.Email");
         PasswordBox.Header = Loc.Get("Common.Password");
+        RegisterLink.Content = Loc.Get("Account.Register");
+        PremiumLink.Content = Loc.Get("Account.Premium");
     }
 
     private void Fields_Changed(object sender, RoutedEventArgs e)
@@ -50,7 +52,32 @@ public sealed partial class LoginDialog : ContentDialog
                 CloseButtonText = "OK",
                 XamlRoot = XamlRoot,
             };
-            await dialog.ShowAsync();
+            if (ex.Kind is RezkaError.AccessDenied or RezkaError.MirrorBanned)
+            {
+                dialog.SecondaryButtonText = Loc.Get("Settings.AutoMirror");
+                if (await dialog.ShowAsync() == ContentDialogResult.Secondary)
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+                    await MirrorService.PickAndApplyAsync(XamlRoot, DispatcherQueue, cts.Token);
+                    await ShowAsync();
+                }
+            }
+            else
+            {
+                await dialog.ShowAsync();
+            }
         }
+    }
+
+    private async void RegisterLink_Click(object sender, RoutedEventArgs e)
+    {
+        Hide();
+        await SiteLinks.OpenAsync(SiteLinks.RegisterUri);
+    }
+
+    private async void PremiumLink_Click(object sender, RoutedEventArgs e)
+    {
+        Hide();
+        await SiteLinks.OpenAsync(SiteLinks.PaymentsUri);
     }
 }

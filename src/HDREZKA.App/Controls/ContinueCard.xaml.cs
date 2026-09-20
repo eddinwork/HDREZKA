@@ -22,6 +22,7 @@ public sealed partial class ContinueCard : UserControl
     }
 
     public event EventHandler<ContinueItem>? DeleteRequested;
+    public event EventHandler<ContinueItem>? WatchedToggled;
 
     public ContinueCard()
     {
@@ -77,6 +78,13 @@ public sealed partial class ContinueCard : UserControl
             WatchedText.Text = Loc.Get("Common.Watched");
         }
 
+        // Manual checkmark: pinned visible + gold when watched.
+        WatchIcon.Foreground = data.IsWatched
+            ? new SolidColorBrush(Microsoft.UI.Colors.Gold)
+            : new SolidColorBrush(Microsoft.UI.Colors.White);
+        WatchButton.Opacity = data.IsWatched ? 1 : 0;
+        ToolTipService.SetToolTip(WatchButton, Loc.Get("Continue.ToggleWatched"));
+
         InfoText.Text = data.Info ?? "";
         InfoText.Visibility = string.IsNullOrEmpty(data.Info) ? Visibility.Collapsed : Visibility.Visible;
 
@@ -91,18 +99,18 @@ public sealed partial class ContinueCard : UserControl
     private void CardContent_Tapped(object sender, TappedRoutedEventArgs e)
     {
         if (Data == null) return;
-        // Clicks on the delete button bubble up here: ignore them,
-        // otherwise deleting an entry also navigates to details.
-        if (IsDeleteButtonSource(e.OriginalSource)) return;
+        // Clicks on action buttons bubble up here: ignore them,
+        // otherwise toggling/deleting an entry also navigates to details.
+        if (IsActionButtonSource(e.OriginalSource)) return;
         Nav.Go<DetailsPage>(new MovieSimple(Id: Data.Id, Name: Data.Title, Poster: Data.Poster));
     }
 
-    private bool IsDeleteButtonSource(object? source)
+    private bool IsActionButtonSource(object? source)
     {
         var current = source as DependencyObject;
         while (current != null)
         {
-            if (ReferenceEquals(current, DeleteButton)) return true;
+            if (ReferenceEquals(current, DeleteButton) || ReferenceEquals(current, WatchButton)) return true;
             current = VisualTreeHelper.GetParent(current);
         }
 
@@ -117,11 +125,20 @@ public sealed partial class ContinueCard : UserControl
         }
     }
 
+    private void WatchButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (Data != null)
+        {
+            WatchedToggled?.Invoke(this, Data);
+        }
+    }
+
     private void Card_PointerEntered(object sender, PointerRoutedEventArgs e)
     {
         AnimateScale(1.03);
         AnimateOpacity(HoverOverlay, 1);
         AnimateOpacity(DeleteButton, 1);
+        if (Data?.IsWatched != true) AnimateOpacity(WatchButton, 1);
     }
 
     private void Card_PointerExited(object sender, PointerRoutedEventArgs e)
@@ -129,6 +146,7 @@ public sealed partial class ContinueCard : UserControl
         AnimateScale(1.0);
         AnimateOpacity(HoverOverlay, 0);
         AnimateOpacity(DeleteButton, 0);
+        if (Data?.IsWatched != true) AnimateOpacity(WatchButton, 0);
     }
 
     private void Card_PointerPressed(object sender, PointerRoutedEventArgs e)

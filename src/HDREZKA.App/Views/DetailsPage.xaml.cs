@@ -74,6 +74,7 @@ public sealed partial class DetailsPage : Page
     {
         WatchText.Text = Loc.Get("Common.Watch");
         BookmarkText.Text = Loc.Get("Common.AddToBookmarks");
+        WatchedText.Text = Loc.Get("Continue.ToggleWatched");
         VoicesHeader.Text = Loc.Get("Common.VoiceActing");
         SeasonsHeader.Text = Loc.Get("Common.Season");
         RetryButton.Content = Loc.Get("Common.Retry");
@@ -182,6 +183,8 @@ public sealed partial class DetailsPage : Page
 
         CommentsSection.Visibility = details.CommentsCount > 0 ? Visibility.Visible : Visibility.Collapsed;
         CommentsToggleText.Text = $"{Loc.Get("Comments.Show")} ({details.CommentsCount})";
+
+        UpdateWatchedButton();
     }
 
     private void AddRating(string label, MovieRating? rating)
@@ -322,6 +325,29 @@ public sealed partial class DetailsPage : Page
         }
     }
 
+    private (string MovieId, string TranslatorId, string? SeasonId, string? EpisodeId)? WatchedKey()
+    {
+        if (_details == null || _voice == null) return null;
+        var movieId = ExtractNumericId(_details.Id) ?? _details.Id;
+        return (movieId, _voice.TranslatorId, _season?.SeasonId, _episode?.EpisodeId);
+    }
+
+    private void UpdateWatchedButton()
+    {
+        var key = WatchedKey();
+        WatchedButton.IsEnabled = key != null;
+        WatchedButton.IsChecked = key != null &&
+            PositionService.Instance.IsWatched(key.Value.MovieId, key.Value.TranslatorId, key.Value.SeasonId, key.Value.EpisodeId);
+    }
+
+    private void WatchedButton_Click(object sender, RoutedEventArgs e)
+    {
+        var key = WatchedKey();
+        if (key == null) return;
+        var now = PositionService.Instance.ToggleWatched(key.Value.MovieId, key.Value.TranslatorId, key.Value.SeasonId, key.Value.EpisodeId);
+        WatchedButton.IsChecked = now;
+    }
+
     private void AddMeta(string label, string value)
     {
         var grid = new Grid { ColumnDefinitions = { new ColumnDefinition { Width = new GridLength(160) }, new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) } } };
@@ -371,6 +397,8 @@ public sealed partial class DetailsPage : Page
             _seasons = _details.Seasons;
             RenderSeasons();
         }
+
+        UpdateWatchedButton();
     }
 
     private void RenderSeasons()
@@ -410,6 +438,7 @@ public sealed partial class DetailsPage : Page
             _season = season;
             _episode = season.Episodes.FirstOrDefault();
             RenderEpisodes();
+            UpdateWatchedButton();
         }
     }
 
@@ -439,6 +468,8 @@ public sealed partial class DetailsPage : Page
         {
             item.IsChecked = item == button;
         }
+
+        UpdateWatchedButton();
     }
 
     private void WatchButton_Click(object sender, RoutedEventArgs e)

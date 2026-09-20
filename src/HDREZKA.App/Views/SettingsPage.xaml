@@ -14,6 +14,11 @@
             <TextBlock x:Name="MirrorHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
             <TextBox x:Name="MirrorBox" PlaceholderText="https://hdrzk.org/" LostFocus="MirrorBox_LostFocus" MaxWidth="480" HorizontalAlignment="Left"/>
             <TextBlock x:Name="MirrorHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
+                <Button x:Name="AutoMirrorButton" Click="AutoMirrorButton_Click" HorizontalAlignment="Left"/>
+                <TextBlock x:Name="MirrorStatusText" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="480"/>
+            </StackPanel>
 
             <TextBlock x:Name="LanguageHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
             <ComboBox x:Name="LanguageBox" MinWidth="220" SelectionChanged="LanguageBox_SelectionChanged"/>

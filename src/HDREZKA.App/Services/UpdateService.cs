@@ -7,8 +7,9 @@ public sealed record UpdateInfo(string Version, string Url, string Notes);
 
 public static class UpdateService
 {
-    public const string CurrentVersion = "1.1.3";
+    public const string CurrentVersion = "1.2.0";
 
+    private const string ReleasesApiUrl = "https://api.github.com/repos/eddinwork/HDREZKA/releases/latest";
     private const string ReleasesPageUrl = "https://github.com/eddinwork/HDREZKA/releases";
 
     /// <summary>
@@ -23,16 +24,34 @@ public static class UpdateService
         return tag.Length > 0 ? tag : null;
     }
 
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
     static UpdateService()
     {
         Http.DefaultRequestHeaders.UserAgent.ParseAdd("HDREZKA-Windows-App");
         Http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+        Http.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
     }
 
     public static async Task<UpdateInfo?> GetLatestAsync()
     {
+        // 1) Official GitHub API (reliable JSON).
+        try
+        {
+            using var resp = await Http.GetAsync(ReleasesApiUrl).ConfigureAwait(false);
+            if (resp.IsSuccessStatusCode)
+            {
+                var json = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+                var info = ParseLatestFromApi(json);
+                if (info != null) return info;
+            }
+        }
+        catch
+        {
+            // fall through to HTML scraping
+        }
+
+        // 2) Fallback: scrape releases page HTML (kept for compat / API rate-limit).
         try
         {
             using var resp = await Http.GetAsync(ReleasesPageUrl).ConfigureAwait(false);
@@ -41,6 +60,30 @@ public static class UpdateService
             var tag = ParseLatestTag(html);
             if (tag == null) return null;
             return new UpdateInfo(tag, $"https://github.com/eddinwork/HDREZKA/releases/tag/{tag}", "");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Parses https://api.github.com/.../releases/latest JSON.
+    /// Pure function for unit tests.
+    /// </summary>
+    public static UpdateInfo? ParseLatestFromApi(string json)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("tag_name", out var tagEl)) return null;
+            var tag = tagEl.GetString()?.Trim();
+            if (string.IsNullOrEmpty(tag)) return null;
+            var url = root.TryGetProperty("html_url", out var urlEl) ? urlEl.GetString() ?? "" : "";
+            var notes = root.TryGetProperty("body", out var bodyEl) ? bodyEl.GetString() ?? "" : "";
+            if (string.IsNullOrEmpty(url)) url = $"https://github.com/eddinwork/HDREZKA/releases/tag/{tag}";
+            return new UpdateInfo(tag, url, notes);
         }
         catch
         {
