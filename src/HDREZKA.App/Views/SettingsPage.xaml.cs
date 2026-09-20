@@ -58,7 +58,7 @@ public sealed partial class SettingsPage : Page
         PosterSizeBox.SelectedIndex = posterIndex >= 0 ? posterIndex : 1;
 
         HeadersToggle.IsOn = settings.UseAndroidHeaders;
-        VersionText.Text = "HDREZKA for Windows · 1.1.2 (20.09.2026)";
+        VersionText.Text = $"HDREZKA for Windows · {UpdateService.CurrentVersion} (20.09.2026)";
 
         DonateAddressText.Text = DonateAddress;
         try
@@ -100,6 +100,8 @@ public sealed partial class SettingsPage : Page
         DonateHint.Text = Loc.Get("Settings.DonateHint");
         DonateCopyButton.Content = Loc.Get("Common.Copy");
         DonateCopiedText.Visibility = Visibility.Collapsed;
+        UpdateHeader.Text = Loc.Get("Settings.Updates");
+        CheckUpdatesButton.Content = Loc.Get("Settings.CheckUpdates");
         AboutHeader.Text = Loc.Get("Settings.About");
         DisclaimerText.Text = Loc.Get("Settings.Disclaimer");
         LogoutButton.Content = Loc.Get("Common.Logout");
@@ -192,6 +194,39 @@ public sealed partial class SettingsPage : Page
         catch (Exception ex)
         {
             App.TryLog(ex);
+        }
+    }
+
+    private async void CheckUpdatesButton_Click(object sender, RoutedEventArgs e)
+    {
+        CheckUpdatesButton.IsEnabled = false;
+        UpdateStatusText.Text = Loc.Get("Settings.Checking");
+        try
+        {
+            var latest = await UpdateService.GetLatestAsync();
+            if (latest == null)
+            {
+                UpdateStatusText.Text = Loc.Get("Error.Network");
+            }
+            else if (UpdateService.IsNewer(latest.Version, UpdateService.CurrentVersion))
+            {
+                UpdateStatusText.Text = Loc.Get("Settings.UpdateAvailable", latest.Version);
+                if (App.MainWindow != null)
+                {
+                    await UpdateService.ShowUpdateDialogAsync(App.MainWindow, latest);
+                }
+            }
+            else
+            {
+                UpdateStatusText.Text = Loc.Get("Settings.UpToDate");
+            }
+
+            SettingsService.Instance.LastUpdateCheckUtc = DateTime.UtcNow;
+            SettingsService.Instance.Save();
+        }
+        finally
+        {
+            CheckUpdatesButton.IsEnabled = true;
         }
     }
 

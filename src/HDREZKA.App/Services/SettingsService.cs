@@ -31,6 +31,11 @@ public sealed class SettingsService
     /// <summary>Login (email or username) typed at the last successful sign-in.</summary>
     public string AccountLogin { get; set; } = "";
 
+    /// <summary>Latest version the user was already notified about (notify once).</summary>
+    public string LastNotifiedVersion { get; set; } = "";
+
+    public DateTime LastUpdateCheckUtc { get; set; }
+
     /// <summary>
     /// Poster width in px (S=104, M=132, L=164, XL=196). Height is always 1.5x.
     /// </summary>
@@ -70,6 +75,8 @@ public sealed class SettingsService
             Speed = loaded.Speed is > 0 and <= 4 ? loaded.Speed : 1.0;
             PosterSize = loaded.PosterSize is >= 80 and <= 256 ? loaded.PosterSize : 132;
             AccountLogin = loaded.AccountLogin ?? "";
+            LastNotifiedVersion = loaded.LastNotifiedVersion ?? "";
+            LastUpdateCheckUtc = loaded.LastUpdateCheckUtc;
         }
         catch
         {

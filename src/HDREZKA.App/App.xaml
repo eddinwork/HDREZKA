@@ -9,10 +9,6 @@
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
                 <ResourceDictionary Source="ms-appx:///Styles/Controls.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            <!-- Transparent pages so the rounded content panel behind them shows through. -->
-            <Style TargetType="Page">
-                <Setter Property="Background" Value="Transparent"/>
-            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -1,4 +1,4 @@
-using HDREZKA.App.Services;
+﻿using HDREZKA.App.Services;
 using HDREZKA.App.Views;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -102,7 +102,7 @@ public sealed partial class MainWindow : Window
     /// because SetPresenter resets drag rectangles.
     /// </summary>
 
-    internal void RefreshTitleBarLayout()
+     private void RefreshTitleBarLayout()
     {
         if (_refreshingTitleBar) return;
         _refreshingTitleBar = true;

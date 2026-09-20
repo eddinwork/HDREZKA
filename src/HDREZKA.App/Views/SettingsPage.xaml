@@ -50,6 +50,10 @@
                 </StackPanel>
             </Border>
 
+            <TextBlock x:Name="UpdateHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
+            <TextBlock x:Name="UpdateStatusText" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640"/>
+            <Button x:Name="CheckUpdatesButton" Click="CheckUpdatesButton_Click" Margin="0,8,0,0" HorizontalAlignment="Left"/>
+
             <TextBlock x:Name="AboutHeader" Style="{StaticResource SectionHeader}" Margin="0,24,0,4"/>
             <TextBlock x:Name="VersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
             <TextBlock x:Name="DisclaimerText" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="0,8,0,0" MaxWidth="640"/>

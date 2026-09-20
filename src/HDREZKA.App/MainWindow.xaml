@@ -11,7 +11,7 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <Grid x:Name="CustomTitleBar" Grid.Row="0" Background="Transparent" x:FieldModifier="internal">
+        <Grid x:Name="CustomTitleBar" Grid.Row="0" Background="Transparent">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="LeftInsetColumn" Width="0"/>
                 <ColumnDefinition Width="Auto"/>
@@ -24,24 +24,16 @@
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
         </Grid>
 
-        <!-- Outer inset: keeps everything off the window edges.
-             The visible rounded outline lives on the content border below,
-             so the sidebar stays bare (no fill, no outline). -->
-        <Border Grid.Row="1" Margin="8,0,8,8" Background="Transparent">
-            <NavigationView
-                x:Name="NavView"
-                Background="Transparent"
-                IsSettingsVisible="False"
-                IsBackButtonVisible="Auto"
-                IsBackEnabled="{x:Bind ContentFrame.CanGoBack, Mode=OneWay}"
-                IsTitleBarAutoPaddingEnabled="False"
-                SelectionChanged="NavView_SelectionChanged"
-                BackRequested="NavView_BackRequested"
-                DisplayModeChanged="NavView_DisplayModeChanged">
-                <NavigationView.Resources>
-                    <SolidColorBrush x:Key="NavigationViewDefaultPaneBackground" Color="Transparent"/>
-                    <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent"/>
-                </NavigationView.Resources>
+        <NavigationView
+            x:Name="NavView"
+            Grid.Row="1"
+            IsSettingsVisible="False"
+            IsBackButtonVisible="Auto"
+            IsBackEnabled="{x:Bind ContentFrame.CanGoBack, Mode=OneWay}"
+            IsTitleBarAutoPaddingEnabled="False"
+            SelectionChanged="NavView_SelectionChanged"
+            BackRequested="NavView_BackRequested"
+            DisplayModeChanged="NavView_DisplayModeChanged">
 
             <NavigationView.AutoSuggestBox>
                 <AutoSuggestBox
@@ -93,15 +85,7 @@
                 </NavigationViewItem>
             </NavigationView.FooterMenuItems>
 
-            <!-- Content-only panel: fill everywhere, but the outline runs only
-                 on the right/bottom sides. The left/top edges border the
-                 sidebar and title bar, which already draw their own edge,
-                 so stroking them too reads as a doubled line. -->
-            <Border CornerRadius="12" Background="{ThemeResource LayerFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,1,1">
-                <Frame x:Name="ContentFrame" />
-            </Border>
-            </NavigationView>
-        </Border>
+            <Frame x:Name="ContentFrame" />
+        </NavigationView>
     </Grid>
 </Window>

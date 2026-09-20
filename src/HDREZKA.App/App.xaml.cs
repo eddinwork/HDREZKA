@@ -54,5 +54,8 @@ public partial class App : Application
 
         MainWindow = new MainWindow();
         MainWindow.Activate();
+
+        // Update check on every launch (notifies at most once per version).
+        _ = Services.UpdateService.CheckAndNotifyAsync(MainWindow);
     }
 }
