@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="HDREZKA.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:HDREZKA.App">
+
+    <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="CustomTitleBar" Grid.Row="0" Background="Transparent" x:FieldModifier="internal">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="LeftInsetColumn" Width="0"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition x:Name="RightInsetColumn" Width="0"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock x:Name="AppTitleText" Grid.Column="1" Text="HDREZKA"
+                       VerticalAlignment="Center" Margin="16,0,0,0" FontSize="12"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+        </Grid>
+
+        <!-- Outer inset: keeps everything off the window edges.
+             The visible rounded outline lives on the content border below,
+             so the sidebar stays bare (no fill, no outline). -->
+        <Border Grid.Row="1" Margin="8,0,8,8" Background="Transparent">
+            <NavigationView
+                x:Name="NavView"
+                Background="Transparent"
+                IsSettingsVisible="False"
+                IsBackButtonVisible="Auto"
+                IsBackEnabled="{x:Bind ContentFrame.CanGoBack, Mode=OneWay}"
+                IsTitleBarAutoPaddingEnabled="False"
+                SelectionChanged="NavView_SelectionChanged"
+                BackRequested="NavView_BackRequested"
+                DisplayModeChanged="NavView_DisplayModeChanged">
+                <NavigationView.Resources>
+                    <SolidColorBrush x:Key="NavigationViewDefaultPaneBackground" Color="Transparent"/>
+                    <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent"/>
+                </NavigationView.Resources>
+
+            <NavigationView.AutoSuggestBox>
+                <AutoSuggestBox
+                    x:Name="SearchBox"
+                    PlaceholderText="Search"
+                    QueryIcon="Find"
+                    Text="{x:Bind SearchText, Mode=OneWay}"
+                    QuerySubmitted="SearchBox_QuerySubmitted" />
+            </NavigationView.AutoSuggestBox>
+
+            <NavigationView.MenuItems>
+                <NavigationViewItem x:Name="NavHome" Tag="Home" Content="Home">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE80F;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="NavCatalog" Tag="Catalog" Content="Catalog">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8A5;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="NavBookmarks" Tag="Bookmarks" Content="Bookmarks">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE734;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="NavContinue" Tag="Continue" Content="Continue">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE7B3;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="NavCollections" Tag="Collections" Content="Collections">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8A5;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <NavigationView.FooterMenuItems>
+                <NavigationViewItem x:Name="NavAccount" Tag="Account" Content="Account">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE77B;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="NavSettings" Tag="Settings" Content="Settings">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.FooterMenuItems>
+
+            <!-- Content-only panel: fill everywhere, but the outline runs only
+                 on the right/bottom sides. The left/top edges border the
+                 sidebar and title bar, which already draw their own edge,
+                 so stroking them too reads as a doubled line. -->
+            <Border CornerRadius="12" Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,1,1">
+                <Frame x:Name="ContentFrame" />
+            </Border>
+            </NavigationView>
+        </Border>
+    </Grid>
+</Window>

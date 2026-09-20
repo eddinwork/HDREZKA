@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="HDREZKA.App.Views.BookmarksPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:HDREZKA.App.Controls"
+    xmlns:api="using:HDREZKA.Core.Api"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid Padding="28,12,28,12" RowSpacing="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock x:Name="TitleText" FontSize="28" FontWeight="Bold" VerticalAlignment="Center"/>
+            <Button x:Name="AddCategoryButton" Click="AddCategoryButton_Click" VerticalAlignment="Center"
+                    Background="Transparent" BorderThickness="0" Padding="8" CornerRadius="8">
+                <FontIcon Glyph="&#xE710;" FontSize="16"/>
+            </Button>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Hidden" HorizontalScrollMode="Auto"
+                      VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Hidden">
+            <StackPanel x:Name="CategoriesPanel" Orientation="Horizontal" Spacing="8"/>
+        </ScrollViewer>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <GridView x:Name="ItemsGrid" SelectionMode="None">
+                    <GridView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ItemsWrapGrid Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </GridView.ItemsPanel>
+                    <GridView.ItemContainerStyle>
+                        <Style TargetType="GridViewItem">
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0,0,12,16"/>
+                            <Setter Property="MinWidth" Value="0"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+                            <Setter Property="IsTabStop" Value="False"/>
+                        </Style>
+                    </GridView.ItemContainerStyle>
+                    <GridView.ItemTemplate>
+                        <DataTemplate x:DataType="api:MovieSimple">
+                            <controls:MovieCard Movie="{x:Bind}"/>
+                        </DataTemplate>
+                    </GridView.ItemTemplate>
+                </GridView>
+
+                <Button x:Name="MoreButton" Click="MoreButton_Click" HorizontalAlignment="Center" Margin="0,8,0,24"
+                        Style="{ThemeResource AccentButtonStyle}" Visibility="Collapsed"/>
+
+                <StackPanel x:Name="StatePanel" HorizontalAlignment="Center" Spacing="10" Margin="0,40,0,40" Visibility="Collapsed">
+                    <ProgressRing x:Name="LoadingRing" IsActive="True" Width="40" Height="40"/>
+                    <TextBlock x:Name="StateText" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

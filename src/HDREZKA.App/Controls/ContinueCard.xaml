@@ -1,0 +1,100 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="HDREZKA.App.Controls.ContinueCard"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid x:Name="CardLayer" UseLayoutRounding="True" Width="176">
+        <Grid.RenderTransform>
+            <CompositeTransform x:Name="ScaleTransform" ScaleX="1" ScaleY="1" CenterX="88" CenterY="132"/>
+        </Grid.RenderTransform>
+
+        <Grid x:Name="CardContent"
+              CornerRadius="12"
+              Background="Transparent"
+              PointerEntered="Card_PointerEntered"
+              PointerExited="Card_PointerExited"
+              PointerPressed="Card_PointerPressed"
+              PointerReleased="Card_PointerReleased"
+              Tapped="CardContent_Tapped"
+              ToolTipService.ToolTip="{x:Bind Data.Title, Mode=OneWay}">
+
+            <StackPanel>
+                <Grid x:Name="PosterHost" Width="176" Height="264" CornerRadius="12" Background="#22000000">
+                    <Border x:Name="PosterClip" CornerRadius="12">
+                        <Border.Clip>
+                            <RectangleGeometry x:Name="PosterClipRect" Rect="0,0,176,264"/>
+                        </Border.Clip>
+                        <Image x:Name="PosterImage" Stretch="UniformToFill"/>
+                    </Border>
+
+                    <Border x:Name="ShadeGradient" CornerRadius="12">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Color="#00000000" Offset="0.45"/>
+                                <GradientStop Color="#CC000000" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+
+                    <Border x:Name="WatchedBadge"
+                            Background="#CC101010"
+                            CornerRadius="10"
+                            Padding="8,3"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top"
+                            Margin="8,8,0,0"
+                            Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <FontIcon Glyph="&#xE73E;" FontSize="11" Foreground="#FFD24A"/>
+                            <TextBlock x:Name="WatchedText" Foreground="White" FontSize="11" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel x:Name="ProgressPanel" VerticalAlignment="Bottom" Padding="10,20,10,10" Spacing="4">
+                        <ProgressBar x:Name="ProgressBar"
+                                      MinHeight="4" Height="4"
+                                      Minimum="0" Maximum="1" Value="0"
+                                      Foreground="{ThemeResource AppAccentBrush}"
+                                      Background="#38FFFFFF"/>
+                        <TextBlock x:Name="InfoText" Foreground="White" FontSize="11" TextTrimming="CharacterEllipsis" MaxLines="1"/>
+                    </StackPanel>
+
+                    <!-- Purely visual: must never intercept pointer input (it covers the whole poster). -->
+                    <Grid x:Name="HoverOverlay" Opacity="0" Background="#33000000" IsHitTestVisible="False">
+                        <FontIcon Glyph="&#xE768;" FontSize="34" Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- Topmost: sits above HoverOverlay so the hitbox is reachable. -->
+                    <Button x:Name="DeleteButton"
+                            Click="DeleteButton_Click"
+                            Background="#99000000"
+                            BorderThickness="0"
+                            CornerRadius="16"
+                            Width="26" Height="26"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Margin="0,8,8,0"
+                            Padding="0"
+                            Opacity="0">
+                        <FontIcon Glyph="&#xE711;" FontSize="11" Foreground="White"/>
+                    </Button>
+                </Grid>
+
+                <StackPanel Margin="2,6,2,0" Spacing="2">
+                    <TextBlock x:Name="TitleText"
+                               Style="{StaticResource CardTitleText}"
+                               FontSize="14"
+                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    <TextBlock x:Name="SubtitleText"
+                               Style="{StaticResource CardDetailsText}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>

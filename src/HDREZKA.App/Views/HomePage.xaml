@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="HDREZKA.App.Views.HomePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:HDREZKA.App.Controls"
+    xmlns:api="using:HDREZKA.Core.Api"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    NavigationCacheMode="Required">
+
+    <Page.Resources>
+        <Style x:Key="HomeGridItemStyle" TargetType="GridViewItem">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,0,12,16"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+            <Setter Property="IsTabStop" Value="False"/>
+        </Style>
+        <DataTemplate x:Key="HomeMovieTemplate" x:DataType="api:MovieSimple">
+            <controls:MovieCard Movie="{x:Bind}"/>
+        </DataTemplate>
+    </Page.Resources>
+
+    <Grid Padding="28,12,28,12">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="ContentPanel" Spacing="4">
+                <Grid x:Name="HeroCard" Height="380" CornerRadius="16" Margin="0,8,0,8"
+                      SizeChanged="HeroCard_SizeChanged">
+                    <Border CornerRadius="16" Background="#22000000">
+                        <Border.Clip>
+                            <RectangleGeometry x:Name="HeroClipRect" Rect="0,0,1200,380"/>
+                        </Border.Clip>
+                        <Image x:Name="HeroBackdrop" Stretch="UniformToFill" Opacity="0.35"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <Border CornerRadius="16">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Color="#66000000" Offset="0"/>
+                                <GradientStop Color="#E6000000" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+
+                    <Grid Padding="24,20,78,20" ColumnSpacing="24">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border x:Name="HeroPosterBorder" CornerRadius="12" Background="#22000000" Width="200" Height="300"
+                                VerticalAlignment="Center" HorizontalAlignment="Left">
+                            <Border.Clip>
+                                <RectangleGeometry x:Name="HeroPosterClip" Rect="0,0,200,300"/>
+                            </Border.Clip>
+                            <Image x:Name="HeroPoster" Stretch="UniformToFill"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="8">
+                            <TextBlock x:Name="HeroKicker" FontSize="13" FontWeight="SemiBold" Foreground="#FFD24A"/>
+                            <TextBlock x:Name="HeroTitle" FontSize="30" FontWeight="Bold" Foreground="White"
+                                       TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Name="HeroDetails" FontSize="13"
+                                       Foreground="#CCFFFFFF" TextWrapping="Wrap" MaxLines="2"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,6,0,0">
+                                <Border x:Name="HeroRatingBadge" Style="{StaticResource RatingBadge}">
+                                    <TextBlock x:Name="HeroRatingText" Style="{StaticResource RatingBadgeText}"/>
+                                </Border>
+                                <Button x:Name="HeroWatchButton" Click="HeroWatchButton_Click"
+                                        Style="{ThemeResource AccentButtonStyle}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+
+                    <Button x:Name="HeroPrevButton" Click="HeroPrevButton_Click"
+                            Width="40" Height="40" CornerRadius="20" Padding="0"
+                            Background="#66000000" BorderThickness="0"
+                            HorizontalAlignment="Left" VerticalAlignment="Center" Margin="12,0,0,0">
+                        <FontIcon Glyph="&#xE76B;" FontSize="14" Foreground="White"/>
+                    </Button>
+                    <Button x:Name="HeroNextButton" Click="HeroNextButton_Click"
+                            Width="40" Height="40" CornerRadius="20" Padding="0"
+                            Background="#66000000" BorderThickness="0"
+                            HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <FontIcon Glyph="&#xE76C;" FontSize="14" Foreground="White"/>
+                    </Button>
+                    <StackPanel x:Name="HeroDots" Orientation="Horizontal" Spacing="6"
+                                HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,20,16"/>
+                </Grid>
+
+                <StackPanel x:Name="FilmsSection" Spacing="0" Margin="0,8,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="FilmsHeader" Style="{StaticResource RowHeaderText}"/>
+                        <Button x:Name="FilmsAllButton" Grid.Column="1" Click="ShowAll_Click"
+                                VerticalAlignment="Bottom" Margin="0,0,0,10"
+                                Background="Transparent" BorderThickness="0" Padding="8,4">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock x:Name="FilmsAllText" FontSize="13"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <FontIcon Glyph="&#xE76C;" FontSize="12"
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <GridView x:Name="FilmsGrid" SelectionMode="None" IsItemClickEnabled="False"
+                              ItemContainerStyle="{StaticResource HomeGridItemStyle}"
+                              ItemTemplate="{StaticResource HomeMovieTemplate}"/>
+                </StackPanel>
+
+                <StackPanel x:Name="SeriesSection" Spacing="0" Margin="0,8,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="SeriesHeader" Style="{StaticResource RowHeaderText}"/>
+                        <Button x:Name="SeriesAllButton" Grid.Column="1" Click="ShowAll_Click"
+                                VerticalAlignment="Bottom" Margin="0,0,0,10"
+                                Background="Transparent" BorderThickness="0" Padding="8,4">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock x:Name="SeriesAllText" FontSize="13"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <FontIcon Glyph="&#xE76C;" FontSize="12"
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <GridView x:Name="SeriesGrid" SelectionMode="None" IsItemClickEnabled="False"
+                              ItemContainerStyle="{StaticResource HomeGridItemStyle}"
+                              ItemTemplate="{StaticResource HomeMovieTemplate}"/>
+                </StackPanel>
+
+                <StackPanel x:Name="CartoonsSection" Spacing="0" Margin="0,8,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="CartoonsHeader" Style="{StaticResource RowHeaderText}"/>
+                        <Button x:Name="CartoonsAllButton" Grid.Column="1" Click="ShowAll_Click"
+                                VerticalAlignment="Bottom" Margin="0,0,0,10"
+                                Background="Transparent" BorderThickness="0" Padding="8,4">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock x:Name="CartoonsAllText" FontSize="13"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <FontIcon Glyph="&#xE76C;" FontSize="12"
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <GridView x:Name="CartoonsGrid" SelectionMode="None" IsItemClickEnabled="False"
+                              ItemContainerStyle="{StaticResource HomeGridItemStyle}"
+                              ItemTemplate="{StaticResource HomeMovieTemplate}"/>
+                </StackPanel>
+
+                <StackPanel x:Name="PopularSection" Spacing="0" Margin="0,8,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="PopularHeader" Style="{StaticResource RowHeaderText}"/>
+                        <Button x:Name="PopularAllButton" Grid.Column="1" Click="ShowAll_Click"
+                                VerticalAlignment="Bottom" Margin="0,0,0,10"
+                                Background="Transparent" BorderThickness="0" Padding="8,4">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock x:Name="PopularAllText" FontSize="13"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <FontIcon Glyph="&#xE76C;" FontSize="12"
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <GridView x:Name="PopularGrid" SelectionMode="None" IsItemClickEnabled="False"
+                              ItemContainerStyle="{StaticResource HomeGridItemStyle}"
+                              ItemTemplate="{StaticResource HomeMovieTemplate}"/>
+                </StackPanel>
+
+                <StackPanel x:Name="WatchingSection" Spacing="0" Margin="0,8,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="WatchingHeader" Style="{StaticResource RowHeaderText}"/>
+                        <Button x:Name="WatchingAllButton" Grid.Column="1" Click="ShowAll_Click"
+                                VerticalAlignment="Bottom" Margin="0,0,0,10"
+                                Background="Transparent" BorderThickness="0" Padding="8,4">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock x:Name="WatchingAllText" FontSize="13"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <FontIcon Glyph="&#xE76C;" FontSize="12"
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <GridView x:Name="WatchingGrid" SelectionMode="None" IsItemClickEnabled="False"
+                              ItemContainerStyle="{StaticResource HomeGridItemStyle}"
+                              ItemTemplate="{StaticResource HomeMovieTemplate}"/>
+                </StackPanel>
+
+                <StackPanel x:Name="SoonSection" Spacing="0" Margin="0,8,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="SoonHeader" Style="{StaticResource RowHeaderText}"/>
+                        <Button x:Name="SoonAllButton" Grid.Column="1" Click="ShowAll_Click"
+                                VerticalAlignment="Bottom" Margin="0,0,0,10"
+                                Background="Transparent" BorderThickness="0" Padding="8,4">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock x:Name="SoonAllText" FontSize="13"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <FontIcon Glyph="&#xE76C;" FontSize="12"
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <GridView x:Name="SoonGrid" SelectionMode="None" IsItemClickEnabled="False"
+                              ItemContainerStyle="{StaticResource HomeGridItemStyle}"
+                              ItemTemplate="{StaticResource HomeMovieTemplate}"/>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel x:Name="LoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+            <ProgressRing IsActive="True" Width="44" Height="44"/>
+            <TextBlock x:Name="LoadingText" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+        </StackPanel>
+
+        <StackPanel x:Name="ErrorPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Visibility="Collapsed">
+            <FontIcon Glyph="&#xE783;" FontSize="36" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+            <TextBlock x:Name="ErrorText" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"/>
+            <Button x:Name="RetryButton" Click="RetryButton_Click" HorizontalAlignment="Center" Style="{ThemeResource AccentButtonStyle}"/>
+        </StackPanel>
+    </Grid>
+</Page>

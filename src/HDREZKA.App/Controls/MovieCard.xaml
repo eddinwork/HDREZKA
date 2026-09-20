@@ -1,0 +1,51 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="HDREZKA.App.Controls.MovieCard"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Button x:Name="CardButton" Padding="2" Background="Transparent" BorderThickness="0"
+            Click="CardButton_Click"
+            PointerEntered="CardButton_PointerEntered"
+            PointerExited="CardButton_PointerExited"
+            PointerPressed="CardButton_PointerPressed"
+            PointerReleased="CardButton_PointerReleased">
+        <Grid x:Name="OuterGrid" Width="130">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Grid x:Name="PosterGrid" Width="130" Height="195">
+                <Border x:Name="PosterClip" CornerRadius="12" Background="#22000000">
+                    <Grid>
+                        <Image x:Name="PosterImage" Stretch="UniformToFill"/>
+                        <Border x:Name="HoverOverlay" Background="#99000000" CornerRadius="12" Opacity="0">
+                            <FontIcon Glyph="&#xE768;" Foreground="White" FontSize="32"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource RatingBadge}">
+                    <TextBlock x:Name="RatingText" Style="{StaticResource RatingBadgeText}"/>
+                </Border>
+
+                <Border x:Name="InfoBadge" Style="{StaticResource InfoBadge}">
+                    <TextBlock x:Name="InfoText" Style="{StaticResource InfoBadgeText}"/>
+                </Border>
+            </Grid>
+
+            <StackPanel Grid.Row="1" Margin="4,6,4,0" Spacing="2">
+                <Grid>
+                    <TextBlock x:Name="TitleText" Style="{StaticResource CardTitleText}"/>
+
+                </Grid>
+                <TextBlock x:Name="DetailsText" Style="{StaticResource CardDetailsText}"/>
+            </StackPanel>
+        </Grid>
+    </Button>
+</UserControl>

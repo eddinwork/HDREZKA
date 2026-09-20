@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="HDREZKA.App.Views.DetailsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:HDREZKA.App.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="MainPanel" Padding="36,16,36,24" Spacing="16" MaxWidth="1200" HorizontalAlignment="Left">
+
+                <Grid ColumnSpacing="28">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Spacing="12">
+                        <Border CornerRadius="10">
+                            <Image x:Name="PosterImage" Width="280" Height="420" Stretch="UniformToFill"/>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Spacing="10">
+                        <TextBlock x:Name="TitleText" FontSize="30" FontWeight="Bold" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="OrigTitleText" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
+
+                        <StackPanel x:Name="RatingsPanel" Orientation="Horizontal" Spacing="10" Margin="0,6,0,0"/>
+
+                        <StackPanel x:Name="UserRatingPanel" Orientation="Horizontal" Spacing="10" Margin="0,8,0,0" Visibility="Collapsed"/>
+
+                        <StackPanel x:Name="MetaPanel" Spacing="0" Margin="0,8,0,0"/>
+
+                        <TextBlock x:Name="DescriptionText" TextWrapping="Wrap" Margin="0,12,0,0" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel x:Name="VoicesPanel" Spacing="8" Visibility="Collapsed">
+                    <TextBlock x:Name="VoicesHeader" Style="{StaticResource SectionHeader}"/>
+                    <ScrollViewer HorizontalScrollBarVisibility="Hidden" HorizontalScrollMode="Auto"
+                                  VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="VoicesList" Orientation="Horizontal" Spacing="8"/>
+                    </ScrollViewer>
+                </StackPanel>
+
+                <StackPanel x:Name="SeasonsPanel" Spacing="8" Visibility="Collapsed">
+                    <TextBlock x:Name="SeasonsHeader" Style="{StaticResource SectionHeader}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <ComboBox x:Name="SeasonBox" MinWidth="180" SelectionChanged="SeasonBox_SelectionChanged"/>
+                    </StackPanel>
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Auto"
+                                  VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
+                        <ItemsControl x:Name="EpisodesList">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="6"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
+                    <Button x:Name="WatchButton" Click="WatchButton_Click" Style="{ThemeResource AccentButtonStyle}" MinHeight="40">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE768;" FontSize="16"/>
+                            <TextBlock x:Name="WatchText" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BookmarkButton" Click="BookmarkButton_Click" MinHeight="40">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE734;" FontSize="16"/>
+                            <TextBlock x:Name="BookmarkText"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <StackPanel x:Name="CommentsSection" Spacing="10" Margin="0,20,0,0" Visibility="Collapsed">
+                    <ToggleButton x:Name="CommentsToggle" Click="CommentsToggle_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE90A;" FontSize="16"/>
+                            <TextBlock x:Name="CommentsToggleText"/>
+                        </StackPanel>
+                    </ToggleButton>
+
+                    <StackPanel x:Name="CommentsPanel" Spacing="10" Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBox x:Name="CommentInput" PlaceholderText="Comment…" MaxLength="2000" Width="480" AcceptsReturn="False" TextWrapping="Wrap"/>
+                            <Button x:Name="CommentSendButton" Click="CommentSendButton_Click" Style="{ThemeResource AccentButtonStyle}" VerticalAlignment="Bottom"/>
+                        </StackPanel>
+                        <StackPanel x:Name="CommentsList" Spacing="4"/>
+                        <Button x:Name="CommentsMoreButton" Click="CommentsMoreButton_Click" Visibility="Collapsed"/>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel x:Name="LoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+            <ProgressRing IsActive="True" Width="44" Height="44"/>
+        </StackPanel>
+
+        <StackPanel x:Name="ErrorPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Visibility="Collapsed">
+            <FontIcon Glyph="&#xE783;" FontSize="36"/>
+            <TextBlock x:Name="ErrorText" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"/>
+            <Button x:Name="RetryButton" Click="RetryButton_Click" HorizontalAlignment="Center" Style="{ThemeResource AccentButtonStyle}"/>
+        </StackPanel>
+    </Grid>
+</Page>

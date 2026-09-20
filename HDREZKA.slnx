@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/HDREZKA.App/HDREZKA.App.csproj">
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="src/HDREZKA.Core/HDREZKA.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/HDREZKA.Tests/HDREZKA.Tests.csproj" />
+  </Folder>
+</Solution>

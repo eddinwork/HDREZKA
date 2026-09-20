@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="HDREZKA.App.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Padding="36,16,36,24" Spacing="4" MaxWidth="900" HorizontalAlignment="Left">
+            <TextBlock x:Name="TitleText" FontSize="28" FontWeight="Bold"/>
+
+            <TextBlock x:Name="MirrorHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
+            <TextBox x:Name="MirrorBox" PlaceholderText="https://hdrzk.org/" LostFocus="MirrorBox_LostFocus" MaxWidth="480" HorizontalAlignment="Left"/>
+            <TextBlock x:Name="MirrorHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+
+            <TextBlock x:Name="LanguageHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
+            <ComboBox x:Name="LanguageBox" MinWidth="220" SelectionChanged="LanguageBox_SelectionChanged"/>
+
+            <TextBlock x:Name="ThemeHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
+            <ComboBox x:Name="ThemeBox" MinWidth="220" SelectionChanged="ThemeBox_SelectionChanged"/>
+
+            <TextBlock x:Name="QualityHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
+            <ComboBox x:Name="QualityBox" MinWidth="220" SelectionChanged="QualityBox_SelectionChanged"/>
+
+            <TextBlock x:Name="PosterSizeHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
+            <ComboBox x:Name="PosterSizeBox" MinWidth="220" SelectionChanged="PosterSizeBox_SelectionChanged"/>
+
+            <TextBlock x:Name="HeadersHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
+            <ToggleSwitch x:Name="HeadersToggle" Toggled="HeadersToggle_Toggled"/>
+            <TextBlock x:Name="HeadersHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+
+            <TextBlock x:Name="DonateHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
+            <TextBlock x:Name="DonateHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640"/>
+            <Border CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                    Padding="16" Margin="0,8,0,0" HorizontalAlignment="Left">
+                <StackPanel Orientation="Horizontal" Spacing="16">
+                    <Image x:Name="DonateQrImage" Width="180" Height="180" Stretch="Uniform"/>
+                    <StackPanel Spacing="8" VerticalAlignment="Center" MaxWidth="380">
+                        <TextBlock x:Name="DonateAddressText" FontFamily="Consolas" FontSize="12"
+                                   TextWrapping="Wrap" IsTextSelectionEnabled="True"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="DonateCopyButton" Click="DonateCopyButton_Click" Style="{ThemeResource AccentButtonStyle}"/>
+                            <TextBlock x:Name="DonateCopiedText" VerticalAlignment="Center" FontSize="12"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" Visibility="Collapsed"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <TextBlock x:Name="AboutHeader" Style="{StaticResource SectionHeader}" Margin="0,24,0,4"/>
+            <TextBlock x:Name="VersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+            <TextBlock x:Name="DisclaimerText" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="0,8,0,0" MaxWidth="640"/>
+
+            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,20,0,0">
+                <Button x:Name="LogoutButton" Click="LogoutButton_Click"/>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</Page>
