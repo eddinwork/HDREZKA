@@ -20,6 +20,16 @@
 - **Аккаунт** — вход, профиль, выход
 - **Персонализация** — тема (системная/светлая/тёмная), язык (русский/English/українська), размер постеров, зеркало сайта с автоматическим подбором рабочего
 
+## Скриншоты
+
+![Главная](screenshots/home.png)
+![Каталог](screenshots/catalog.png)
+![Закладки](screenshots/bookmarks.png)
+![Детали](screenshots/details.png)
+![Сезоны и комментарии](screenshots/seasons.png)
+![Плеер](screenshots/player.png)
+![Плеер в работе](screenshots/player-controls.png)
+
 ## Системные требования
 
 - Windows 10 версии 19041+ / Windows 11, x64
