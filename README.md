@@ -2,7 +2,7 @@
 
 Неофициальный клиент HDRezka для Windows: каталог фильмов, сериалов, мультфильмов и аниме, онлайн-просмотр, закладки, история, комментарии и оценки.
 
-![version](https://img.shields.io/badge/version-1.1.2-blue) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-lightgrey) ![license](https://img.shields.io/badge/license-MIT-green)
+![version](https://img.shields.io/badge/version-1.1.3-blue) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-lightgrey) ![license](https://img.shields.io/badge/license-MIT-green)
 
 ## Возможности
 
@@ -28,7 +28,7 @@
 
 ## Установка
 
-1. Скачайте `HDREZKA-Setup-1.1.2.exe` из раздела [Releases](../../releases).
+1. Скачайте `HDREZKA-Setup-1.1.3.exe` из раздела [Releases](../../releases).
 2. Запустите и укажите папку установки.
 3. Ярлыки появятся в меню «Пуск» (и на рабочем столе — опционально).
 
