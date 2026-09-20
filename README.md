@@ -4,6 +4,8 @@
 
 ![version](https://img.shields.io/badge/version-1.2.0-blue) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-lightgrey) ![license](https://img.shields.io/badge/license-MIT-green)
 
+## Группа в Telegram: https://t.me/hdrezkawin
+
 ## Возможности
 
 - **Главная** — hero-карусель топа недели, подборки новинок, популярного и ожидаемого
@@ -34,8 +36,6 @@
 
 - Windows 10 версии 19041+ / Windows 11, x64
 - Отдельная установка Windows App SDK **не требуется** (self-contained сборка)
-
-## Группа в Telegram: https://t.me/hdrezkawin
 
 ## Установка
 
