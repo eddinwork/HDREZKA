@@ -19,6 +19,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=no
 LicenseFile=..\LICENSE.md
+SetupIconFile=..\src\HDREZKA.App\Assets\logo.ico
 PrivilegesRequired=lowest
 OutputDir=Output
 OutputBaseFilename={#MyAppName}-Setup-{#MyAppVersion}

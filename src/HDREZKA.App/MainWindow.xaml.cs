@@ -30,6 +30,15 @@ public sealed partial class MainWindow : Window
         ExtendsContentIntoTitleBar = true;
         SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
 
+        try
+        {
+            AppWindow.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "logo.ico"));
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+
         ThemeHelper.SetRoot(RootGrid);
         try
         {

@@ -27,6 +27,15 @@ public sealed partial class PlayerWindow : Window
 
         try
         {
+            AppWindow.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "logo.ico"));
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+
+        try
+        {
             const int width = 1280;
             const int height = 720;
             AppWindow.Resize(new SizeInt32(width, height));
