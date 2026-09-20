@@ -87,4 +87,4 @@ QR-код — в разделе «Настройки → Поддержать п
 
 ## Лицензия
 
-MIT License, Copyright (c) 2025 voidboost. Текст на русском, английском и украинском — в [LICENSE.md](LICENSE.md).
+MIT License, Copyright (c) 2026. Текст на русском, английском и украинском — в [LICENSE.md](LICENSE.md).
