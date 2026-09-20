@@ -6,7 +6,7 @@ MIT License. Full text in English, Russian and Ukrainian below.
 
 ## English
 
-Copyright (c) 2025 voidboost
+Copyright (c) 2026
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -30,7 +30,7 @@ SOFTWARE.
 
 ## Русский
 
-Авторское право (c) 2025 voidboost
+Авторское право (c) 2026
 
 Настоящим бесплатно предоставляется разрешение любому лицу, получившему копию
 данного программного обеспечения и сопутствующей документации (далее —
@@ -57,7 +57,7 @@ SOFTWARE.
 
 ## Українська
 
-Авторське право (c) 2025 voidboost
+Авторське право (c) 2026
 
 Цим безкоштовно надається дозвіл будь-якій особі, яка отримала копію
 цього програмного забезпечення та супутньої документації (далі —
