@@ -14,7 +14,8 @@
         </Grid.RowDefinitions>
 
         <StackPanel Orientation="Horizontal" Spacing="12">
-            <TextBlock x:Name="TitleText" FontSize="28" FontWeight="Bold"/>
+            <TextBlock x:Name="TitleText" FontSize="28" FontWeight="Bold" VerticalAlignment="Center"/>
+            <ComboBox x:Name="SortBox" SelectionChanged="SortBox_SelectionChanged" VerticalAlignment="Center" MinWidth="180"/>
             <ProgressRing x:Name="LoadingRing" Width="20" Height="20" VerticalAlignment="Center" IsActive="False"/>
         </StackPanel>
 

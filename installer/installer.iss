@@ -5,7 +5,7 @@
 ; The installer lets the user pick any install folder.
 
 #define MyAppName "HDREZKA"
-#define MyAppVersion "1.2.0"
+#define MyAppVersion "1.3.0"
 #define MyAppPublisher "voidboost"
 #define MyAppExeName "HDREZKA.App.exe"
 #define MyAppSourceDir "..\\src\\HDREZKA.App\\bin\\Release\\net8.0-windows10.0.19041.0\\win-x64\\publish"

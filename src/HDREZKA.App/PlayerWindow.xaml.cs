@@ -23,6 +23,11 @@ public sealed partial class PlayerWindow : Window
 
         InitializeComponent();
 
+        // No system title bar at all: close/pin live in the app top bar,
+        // the window keeps only a resizable border. Content extends
+        // into the title area from the start.
+        ExtendsContentIntoTitleBar = true;
+
         Title = "HDREZKA Player";
 
         try
@@ -52,10 +57,33 @@ public sealed partial class PlayerWindow : Window
         }
 
         Closed += OnClosed;
+        ApplyChromePolicy();
     }
 
-    public void ShowPlayer(PlayerLaunch launch)
+    /// <summary>
+    /// Chromeless player: no system title bar (close/pin are custom buttons
+    /// in the app top bar), keeps the resizable border, min/max disabled.
+    /// Must be re-applied after every SetPresenter call — it creates
+    /// a new presenter with default flags.
+    /// </summary>
+    public void ApplyChromePolicy()
     {
+        try
+        {
+            if (AppWindow.Presenter is OverlappedPresenter presenter)
+            {
+                presenter.SetBorderAndTitleBar(true, false);
+                presenter.IsMinimizable = false;
+                presenter.IsMaximizable = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+    }
+
+    public void ShowPlayer(PlayerLaunch launch)    {
         try
         {
             Title = string.IsNullOrWhiteSpace(launch.Details.Name)

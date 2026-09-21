@@ -12,25 +12,34 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel x:Name="MainPanel" Padding="36,16,36,24" Spacing="16" MaxWidth="1200" HorizontalAlignment="Left">
 
-                <Grid ColumnSpacing="28">
+                <Grid x:Name="HeaderGrid" ColumnSpacing="28" RowSpacing="16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                    <StackPanel Spacing="12">
+                    <StackPanel x:Name="PosterPanel" Spacing="12">
                         <Border CornerRadius="10">
                             <Image x:Name="PosterImage" Width="280" Height="420" Stretch="UniformToFill"/>
                         </Border>
                     </StackPanel>
 
-                    <StackPanel Grid.Column="1" Spacing="10">
+                    <StackPanel x:Name="InfoPanel" Grid.Column="1" Spacing="10">
                         <TextBlock x:Name="TitleText" FontSize="30" FontWeight="Bold" TextWrapping="Wrap"/>
                         <TextBlock x:Name="OrigTitleText" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
 
-                        <StackPanel x:Name="RatingsPanel" Orientation="Horizontal" Spacing="10" Margin="0,6,0,0"/>
+                        <ScrollViewer HorizontalScrollBarVisibility="Hidden" HorizontalScrollMode="Auto"
+                                      VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
+                            <StackPanel Spacing="10">
+                                <StackPanel x:Name="RatingsPanel" Orientation="Horizontal" Spacing="10" Margin="0,6,0,0"/>
 
-                        <StackPanel x:Name="UserRatingPanel" Orientation="Horizontal" Spacing="10" Margin="0,8,0,0" Visibility="Collapsed"/>
+                                <StackPanel x:Name="UserRatingPanel" Orientation="Horizontal" Spacing="10" Margin="0,8,0,0" Visibility="Collapsed"/>
+                            </StackPanel>
+                        </ScrollViewer>
 
                         <StackPanel x:Name="MetaPanel" Spacing="0" Margin="0,8,0,0"/>
 
@@ -82,6 +91,12 @@
                             <TextBlock x:Name="WatchedText"/>
                         </StackPanel>
                     </ToggleButton>
+                    <ToggleButton x:Name="TrackButton" Click="TrackButton_Click" MinHeight="40">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE91C;" FontSize="16"/>
+                            <TextBlock x:Name="TrackText"/>
+                        </StackPanel>
+                    </ToggleButton>
                 </StackPanel>
 
                 <StackPanel x:Name="CommentsSection" Spacing="10" Margin="0,20,0,0" Visibility="Collapsed">
@@ -93,10 +108,14 @@
                     </ToggleButton>
 
                     <StackPanel x:Name="CommentsPanel" Spacing="10" Visibility="Collapsed">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBox x:Name="CommentInput" PlaceholderText="Comment…" MaxLength="2000" Width="480" AcceptsReturn="False" TextWrapping="Wrap"/>
-                            <Button x:Name="CommentSendButton" Click="CommentSendButton_Click" Style="{ThemeResource AccentButtonStyle}" VerticalAlignment="Bottom"/>
-                        </StackPanel>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="CommentInput" PlaceholderText="Comment…" MaxLength="2000" HorizontalAlignment="Stretch" MaxWidth="640" AcceptsReturn="False" TextWrapping="Wrap"/>
+                            <Button Grid.Column="1" x:Name="CommentSendButton" Click="CommentSendButton_Click" Style="{ThemeResource AccentButtonStyle}" VerticalAlignment="Bottom"/>
+                        </Grid>
                         <StackPanel x:Name="CommentsList" Spacing="4"/>
                         <Button x:Name="CommentsMoreButton" Click="CommentsMoreButton_Click" Visibility="Collapsed"/>
                     </StackPanel>

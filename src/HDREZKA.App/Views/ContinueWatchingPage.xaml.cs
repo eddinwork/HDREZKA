@@ -23,6 +23,7 @@ public sealed partial class ContinueWatchingPage : Page
         base.OnNavigatedTo(e);
         ApplyLocalization();
         LocalizationService.Instance.LanguageChanged += OnLanguageChanged;
+        BuildSortBox();
         Render();
         LoadFromAccount();
     }
@@ -47,6 +48,27 @@ public sealed partial class ContinueWatchingPage : Page
         TitleText.Text = Loc.Get("Continue.Title");
         EmptyText.Text = Loc.Get("Continue.Empty");
         RetryButton.Content = Loc.Get("Common.Retry");
+        BuildSortBox();
+    }
+
+    private void BuildSortBox()
+    {
+        SortBox.SelectionChanged -= SortBox_SelectionChanged;
+        SortBox.Items.Clear();
+        SortBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Continue.SortNewest"), Tag = false });
+        SortBox.Items.Add(new ComboBoxItem { Content = Loc.Get("Continue.SortOldest"), Tag = true });
+        SortBox.SelectedIndex = SettingsService.Instance.ContinueOldestFirst ? 1 : 0;
+        SortBox.SelectionChanged += SortBox_SelectionChanged;
+    }
+
+    private void SortBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (SortBox.SelectedItem is ComboBoxItem { Tag: bool oldest })
+        {
+            SettingsService.Instance.ContinueOldestFirst = oldest;
+            SettingsService.Instance.Save();
+            RenderList();
+        }
     }
 
     private void Render()
@@ -71,6 +93,48 @@ public sealed partial class ContinueWatchingPage : Page
              || title.Contains("тест", StringComparison.OrdinalIgnoreCase)));
 
     internal static bool IsLocalTestEntry(string movieId, string? title) => IsTestEntry(movieId, title);
+
+    /// <summary>
+    /// Server "continue" dates look like "12.09.2026", sometimes with time
+    /// or relative words. Unparseable → null (caller falls back).
+    /// </summary>
+    internal static DateTime? ParseAccountDate(string date)
+    {
+        if (string.IsNullOrWhiteSpace(date)) return null;
+        var s = date.Trim();
+        var today = DateTime.Today;
+
+        if (s.StartsWith("сегодня", StringComparison.OrdinalIgnoreCase)
+            || s.StartsWith("today", StringComparison.OrdinalIgnoreCase)
+            || s.StartsWith("сьогодні", StringComparison.OrdinalIgnoreCase))
+        {
+            return today;
+        }
+
+        if (s.StartsWith("вчера", StringComparison.OrdinalIgnoreCase)
+            || s.StartsWith("yesterday", StringComparison.OrdinalIgnoreCase)
+            || s.StartsWith("вчора", StringComparison.OrdinalIgnoreCase))
+        {
+            return today.AddDays(-1);
+        }
+
+        string[] formats =
+        [
+            "dd.MM.yyyy HH:mm", "dd.MM.yyyy H:mm", "dd.MM.yyyy",
+            "dd-MM-yyyy HH:mm", "dd-MM-yyyy",
+            "yyyy-MM-dd HH:mm", "yyyy-MM-dd",
+            "dd/MM/yyyy",
+        ];
+        if (DateTime.TryParseExact(s, formats,
+                System.Globalization.CultureInfo.GetCultureInfo("ru-RU"),
+                System.Globalization.DateTimeStyles.None, out var exact))
+        {
+            return exact;
+        }
+
+        if (DateTime.TryParse(s, out var generic)) return generic;
+        return null;
+    }
 
     internal static ContinueItem FromLocal(WatchPosition p)
     {
@@ -125,7 +189,18 @@ public sealed partial class ContinueWatchingPage : Page
                     ? $"{Loc.Get("Common.Season")} {match.SeasonId} · {Loc.Get("Common.Episode")} {match.EpisodeId}"
                     : item.Details;
 
-                _items.Insert(0, new ContinueItem(
+                // Server date first (site order is newest-first), local match
+                // refines it — take the freshest of the two.
+                var serverDate = ParseAccountDate(item.Date);
+                DateTime? updated = match?.UpdatedAt;
+                if (serverDate != null && (updated == null || serverDate > updated))
+                {
+                    updated = serverDate;
+                }
+
+                // Append (not prepend): OrderBy is stable, so entries with
+                // equal/unparseable dates keep the server newest-first order.
+                _items.Add(new ContinueItem(
                     Id: item.Id,
                     Title: item.Title,
                     Poster: item.Poster,
@@ -136,7 +211,7 @@ public sealed partial class ContinueWatchingPage : Page
                     ActionLabel: item.ActionLabel,
                     DataId: item.DataId,
                     IsWatched: item.Watched,
-                    UpdatedAt: match?.UpdatedAt,
+                    UpdatedAt: updated,
                     MovieKey: match?.MovieId,
                     TranslatorKey: match?.TranslatorId,
                     SeasonKey: match?.SeasonId,
@@ -161,7 +236,10 @@ public sealed partial class ContinueWatchingPage : Page
     private void RenderList()
     {
         List.Items.Clear();
-        foreach (var item in _items.OrderByDescending(i => i.UpdatedAt ?? DateTime.MinValue))
+        var ordered = SettingsService.Instance.ContinueOldestFirst
+            ? _items.OrderBy(i => i.UpdatedAt ?? DateTime.MinValue)
+            : _items.OrderByDescending(i => i.UpdatedAt ?? DateTime.MinValue);
+        foreach (var item in ordered)
         {
             List.Items.Add(BuildCard(item));
         }

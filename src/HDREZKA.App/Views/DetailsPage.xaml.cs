@@ -31,6 +31,8 @@ public sealed partial class DetailsPage : Page
     public DetailsPage()
     {
         InitializeComponent();
+        Loaded += (_, _) => UpdateAdaptiveLayout();
+        SizeChanged += (_, _) => UpdateAdaptiveLayout();
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -62,10 +64,32 @@ public sealed partial class DetailsPage : Page
 
     private void OnPosterSizeChanged() => DispatcherQueue.TryEnqueue(ApplyPosterMetrics);
 
+    private bool _isNarrow;
+
+    /// <summary>
+    /// Manual adaptive layout (page content width, not window): stacked
+    /// poster + full-width info when narrow. Done in code, not VSM —
+    /// deterministic and testable.
+    /// </summary>
+    private void UpdateAdaptiveLayout()
+    {
+        var narrow = ActualWidth > 0 && ActualWidth < 640;
+        if (narrow == _isNarrow) return;
+
+        _isNarrow = narrow;
+        Grid.SetColumnSpan(PosterPanel, narrow ? 2 : 1);
+        Grid.SetRow(InfoPanel, narrow ? 1 : 0);
+        Grid.SetColumn(InfoPanel, narrow ? 0 : 1);
+        Grid.SetColumnSpan(InfoPanel, narrow ? 2 : 1);
+        ApplyPosterMetrics();
+        if (_details != null) BuildMeta(_details);
+    }
+
     private void ApplyPosterMetrics()
     {
-        PosterImage.Width = PosterMetrics.DetailsWidth;
-        PosterImage.Height = PosterMetrics.DetailsHeight;
+        var width = _isNarrow ? Math.Min(PosterMetrics.DetailsWidth, 200) : PosterMetrics.DetailsWidth;
+        PosterImage.Width = width;
+        PosterImage.Height = (int)Math.Round(width * 1.5);
     }
 
     private void OnLanguageChanged() => DispatcherQueue.TryEnqueue(ApplyLocalization);
@@ -75,6 +99,7 @@ public sealed partial class DetailsPage : Page
         WatchText.Text = Loc.Get("Common.Watch");
         BookmarkText.Text = Loc.Get("Common.AddToBookmarks");
         WatchedText.Text = Loc.Get("Continue.ToggleWatched");
+        TrackText.Text = Loc.Get("Details.Track");
         VoicesHeader.Text = Loc.Get("Common.VoiceActing");
         SeasonsHeader.Text = Loc.Get("Common.Season");
         RetryButton.Content = Loc.Get("Common.Retry");
@@ -132,14 +157,7 @@ public sealed partial class DetailsPage : Page
         BuildRateRow();
 
         MetaPanel.Children.Clear();
-        if (details.Year != null) AddMeta(Loc.Get("Details.Year"), details.Year);
-        if (details.Countries is { Count: > 0 }) AddMeta(Loc.Get("Details.Country"), string.Join(", ", details.Countries.Select(c => c.Name)));
-        if (details.Genres is { Count: > 0 }) AddMeta(Loc.Get("Details.Genre"), string.Join(", ", details.Genres.Select(g => g.Name)));
-        if (details.Duration is { } mins) AddMeta(Loc.Get("Details.Duration"), $"{mins} {Loc.Get("Common.Minutes")}");
-        if (details.Producers is { Count: > 0 }) AddMeta(Loc.Get("Details.Director"), string.Join(", ", details.Producers.Select(p => p.Name)));
-        if (details.Actors is { Count: > 0 }) AddMeta(Loc.Get("Details.Actors"), string.Join(", ", details.Actors.Select(a => a.Name)));
-        if (details.Slogan is { Length: > 0 }) AddMeta(Loc.Get("Details.Slogan"), details.Slogan);
-        if (details.AgeRestriction is { } age) AddMeta(Loc.Get("Details.Age"), age);
+        BuildMeta(details);
 
         // voices
         VoicesPanel.Visibility = details.VoiceActings is { Count: > 0 } ? Visibility.Visible : Visibility.Collapsed;
@@ -185,6 +203,22 @@ public sealed partial class DetailsPage : Page
         CommentsToggleText.Text = $"{Loc.Get("Comments.Show")} ({details.CommentsCount})";
 
         UpdateWatchedButton();
+        UpdateTrackButton();
+    }
+
+    private int MetaLabelWidth => _isNarrow ? 110 : 160;
+
+    private void BuildMeta(MovieDetailed details)
+    {
+        MetaPanel.Children.Clear();
+        if (details.Year != null) AddMeta(Loc.Get("Details.Year"), details.Year);
+        if (details.Countries is { Count: > 0 }) AddMeta(Loc.Get("Details.Country"), string.Join(", ", details.Countries.Select(c => c.Name)));
+        if (details.Genres is { Count: > 0 }) AddMeta(Loc.Get("Details.Genre"), string.Join(", ", details.Genres.Select(g => g.Name)));
+        if (details.Duration is { } mins) AddMeta(Loc.Get("Details.Duration"), $"{mins} {Loc.Get("Common.Minutes")}");
+        if (details.Producers is { Count: > 0 }) AddMeta(Loc.Get("Details.Director"), string.Join(", ", details.Producers.Select(p => p.Name)));
+        if (details.Actors is { Count: > 0 }) AddMeta(Loc.Get("Details.Actors"), string.Join(", ", details.Actors.Select(a => a.Name)));
+        if (details.Slogan is { Length: > 0 }) AddMeta(Loc.Get("Details.Slogan"), details.Slogan);
+        if (details.AgeRestriction is { } age) AddMeta(Loc.Get("Details.Age"), age);
     }
 
     private void AddRating(string label, MovieRating? rating)
@@ -340,17 +374,37 @@ public sealed partial class DetailsPage : Page
             PositionService.Instance.IsWatched(key.Value.MovieId, key.Value.TranslatorId, key.Value.SeasonId, key.Value.EpisodeId);
     }
 
+    private void UpdateTrackButton()
+    {
+        var tracked = _details != null && TrackedSeriesService.IsTracked(_details.Id);
+        TrackButton.IsEnabled = _details != null;
+        TrackButton.IsChecked = tracked;
+    }
+
+    private void TrackButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_details == null) return;
+        var now = TrackedSeriesService.ToggleTracked(_details.Id, _details.Name, _details.Poster);
+        TrackButton.IsChecked = now;
+    }
+
     private void WatchedButton_Click(object sender, RoutedEventArgs e)
     {
         var key = WatchedKey();
         if (key == null) return;
         var now = PositionService.Instance.ToggleWatched(key.Value.MovieId, key.Value.TranslatorId, key.Value.SeasonId, key.Value.EpisodeId);
         WatchedButton.IsChecked = now;
+
+        // Series only: remember for new-episode notifications.
+        if (_details != null && _season != null && _episode != null)
+        {
+            TrackedSeriesService.Touch(_details.Id, _details.Name, _details.Poster);
+        }
     }
 
     private void AddMeta(string label, string value)
     {
-        var grid = new Grid { ColumnDefinitions = { new ColumnDefinition { Width = new GridLength(160) }, new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) } } };
+        var grid = new Grid { ColumnDefinitions = { new ColumnDefinition { Width = new GridLength(MetaLabelWidth) }, new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) } } };
         grid.Children.Add(new TextBlock
         {
             Text = label,

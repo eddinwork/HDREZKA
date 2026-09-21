@@ -60,5 +60,8 @@ public partial class App : Application
 
         // First-launch mirror autopick (silent, skips logged-in sessions).
         _ = Services.MirrorService.AutoPickOnStartupAsync();
+
+        // New-episode notifications for watched series (delayed, background).
+        _ = Services.TrackedSeriesService.CheckOnStartupAsync();
     }
 }

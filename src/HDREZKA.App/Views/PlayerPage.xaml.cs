@@ -29,6 +29,33 @@ public sealed partial class PlayerPage : Page
     private PlayerLaunch? _launch;
     private MovieVideo? _video;
     private string _quality = "";
+    private bool _isPinned;
+
+    // Keeps the PC awake while video is playing (display + sleep).
+    private Windows.System.Display.DisplayRequest? _displayRequest;
+    private bool _displayActive;
+
+    private void UpdateDisplayRequest(bool playing)
+    {
+        try
+        {
+            if (playing && !_displayActive)
+            {
+                _displayRequest ??= new Windows.System.Display.DisplayRequest();
+                _displayRequest.RequestActive();
+                _displayActive = true;
+            }
+            else if (!playing && _displayActive)
+            {
+                _displayRequest?.RequestRelease();
+                _displayActive = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+    }
     private bool _seeking;
     private bool _switching;
     private bool _endReached;
@@ -40,7 +67,6 @@ public sealed partial class PlayerPage : Page
     private readonly DispatcherTimer _saveTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private DateTime _lastSiteSave = DateTime.MinValue;
     private bool _isFullscreen;
-    private bool _savedTopMost;
     private Windows.Graphics.RectInt32 _savedBounds;
 
     /// <summary>
@@ -59,6 +85,9 @@ public sealed partial class PlayerPage : Page
         Loaded += (_, _) =>
         {
             BuildSpeedMenu();
+            // Re-apply after activation: SetTitleBar may not stick
+            // when called pre-activation from OnNavigatedTo.
+            ApplyWindowChrome();
             ReturnFocus();
         };
     }
@@ -79,6 +108,7 @@ public sealed partial class PlayerPage : Page
         TitleText.Text = launch.Details.Name;
         UpdateEpisodeText();
         ApplyLocalization();
+        ApplyWindowChrome();
 
         _ = LoadVideoAsync(seekToSaved: true);
     }
@@ -92,6 +122,7 @@ public sealed partial class PlayerPage : Page
 
     private void TeardownPlayback()
     {
+        UpdateDisplayRequest(false);
         SavePosition();
         _saveTimer.Stop();
         _hideTimer.Stop();
@@ -188,6 +219,86 @@ public sealed partial class PlayerPage : Page
         ToolTipService.SetToolTip(FullscreenButton, Loc.Get("Player.Fullscreen"));
         ToolTipService.SetToolTip(ZoomButton, Loc.Get("Player.Zoom"));
         ToolTipService.SetToolTip(ExternalButton, Loc.Get("Player.External"));
+        ToolTipService.SetToolTip(PinButton, Loc.Get("Player.Pin"));
+        ToolTipService.SetToolTip(CloseButton, Loc.Get("Player.Close"));
+        MirrorButton.Content = Loc.Get("Settings.AutoMirror");
+    }
+
+    /// <summary>
+    /// Chromeless window setup: TopBar is the drag region, chrome policy
+    /// (no system title bar) + pin state are (re-)applied. Call on
+    /// navigate and after every fullscreen transition.
+    /// </summary>
+    private void ApplyWindowChrome()
+    {
+        var window = Host;
+        if (window == null) return;
+        try { window.SetTitleBar(TopBar); }
+        catch (Exception ex) { App.TryLog(ex); }
+        if (window is PlayerWindow pw) pw.ApplyChromePolicy();
+        ApplyPin();
+    }
+
+    private void ApplyPin()
+    {
+        try
+        {
+            if (Host?.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter overlapped)
+            {
+                overlapped.IsAlwaysOnTop = _isPinned;
+            }
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+
+        PinButton.IsChecked = _isPinned;
+    }
+
+    private void PinButton_Click(object sender, RoutedEventArgs e)
+    {
+        ReturnFocus();
+        _isPinned = !_isPinned;
+        ApplyPin();
+    }
+
+    private void CloseButton_Click(object sender, RoutedEventArgs e)
+    {
+        try { (HostWindow ?? Host)?.Close(); }
+        catch (Exception ex) { App.TryLog(ex); }
+    }
+
+    // ---------- custom title-bar dragging (TopBar) ----------
+    // Dragging is native only (Window.SetTitleBar): a manual Move() per
+    // pointer event fights the native drag and causes stutter, so there
+    // is intentionally no manual moving code here. SetTitleBar must be
+    // (re-)applied after window activation — see Loaded + ApplyWindowChrome.
+
+    private static bool IsTopBarInteractiveSource(object? source)
+    {
+        var current = source as DependencyObject;
+        while (current != null)
+        {
+            if (current is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase
+                || current is ComboBox
+                || current is Microsoft.UI.Xaml.Controls.Primitives.SelectorItem
+                || current is Microsoft.UI.Xaml.Controls.Primitives.Thumb
+                || current is Slider)
+            {
+                return true;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return false;
+    }
+
+    private void TopBar_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        if (IsTopBarInteractiveSource(e.OriginalSource)) return;
+        ToggleFullscreen();
     }
 
     private void ApplySpeed()
@@ -283,12 +394,13 @@ public sealed partial class PlayerPage : Page
         catch (RezkaException ex)
         {
             App.TryLog(ex);
-            ShowStatus(RezkaService.Instance.ErrorText(ex));
+            ShowStatus(RezkaService.Instance.ErrorText(ex),
+                ex.Kind is RezkaError.Network or RezkaError.AccessDenied or RezkaError.MirrorBanned);
         }
         catch (Exception ex)
         {
             App.TryLog(ex);
-            ShowStatus(Loc.Get("Error.Network"));
+            ShowStatus(Loc.Get("Error.Network"), showMirrorButton: true);
         }
         finally
         {
@@ -638,12 +750,14 @@ public sealed partial class PlayerPage : Page
                     LoadingPanel.Visibility = Visibility.Collapsed;
                     _hasPlayedOnce = true;
                     _hideTimer.Start();
+                    UpdateDisplayRequest(true);
                     break;
                 case MediaPlaybackState.Paused:
                     PlayPauseIcon.Glyph = "\uE768";
                     BigPlayIcon.Glyph = "\uE768";
                     BigPlayButton.Opacity = 1;
                     BigPlayButton.Visibility = Visibility.Visible;
+                    UpdateDisplayRequest(false);
                     ShowControls();
                     break;
                 case MediaPlaybackState.Buffering:
@@ -688,6 +802,7 @@ public sealed partial class PlayerPage : Page
 
     private void OnMediaEnded(MediaPlayer sender, object args)
     {
+        UpdateDisplayRequest(false);
         DispatcherQueue.TryEnqueue(async () =>
         {
             _endReached = true;
@@ -703,9 +818,10 @@ public sealed partial class PlayerPage : Page
 
     private void OnMediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs e)
     {
+        UpdateDisplayRequest(false);
         _pendingSeekMs = 0;
         App.TryLog(new Exception($"[Player] MediaFailed: {e.Error} {e.ErrorMessage} code={e.ExtendedErrorCode}"));
-        DispatcherQueue.TryEnqueue(() => ShowStatus(Loc.Get("Error.Network")));
+        DispatcherQueue.TryEnqueue(() => ShowStatus(Loc.Get("Player.StreamFailed"), showMirrorButton: true));
     }
 
     // ---------- controls ----------
@@ -714,6 +830,13 @@ public sealed partial class PlayerPage : Page
     {
         ReturnFocus();
         if (_player == null) return;
+        // Error state (nothing loaded): big button tap retries same mirror.
+        if (_playbackItem == null && !_switching && _launch != null)
+        {
+            _ = LoadVideoAsync(seekToSaved: false);
+            return;
+        }
+
         if (_player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing) _player.Pause();
         else _player.Play();
     }
@@ -909,6 +1032,12 @@ public sealed partial class PlayerPage : Page
                 launch.Details.Name,
                 launch.Details.Poster,
                 launch.Details.Id));
+
+            // Series only: remember for new-episode notifications.
+            if (launch.Season != null && launch.Episode != null)
+            {
+                TrackedSeriesService.Touch(launch.Details.Id, launch.Details.Name, launch.Details.Poster);
+            }
         }
         catch (Exception ex)
         {
@@ -1031,23 +1160,12 @@ public sealed partial class PlayerPage : Page
             App.TryLog(new Exception($"[Player] FS enter: kind={appWindow.Presenter.Kind} bounds={appWindow.Size.Width}x{appWindow.Size.Height}"));
             try
             {
-                // NOTE: the player lives in a separate window with the default
-                // system title bar, so no ExtendsContentIntoTitleBar juggling here.
-                if (appWindow.Presenter is not Microsoft.UI.Windowing.OverlappedPresenter)
-                {
-                    appWindow.SetPresenter(Microsoft.UI.Windowing.AppWindowPresenterKind.Overlapped);
-                }
-
-                if (appWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter overlapped)
-                {
-                    overlapped.SetBorderAndTitleBar(false, false);
-                    try { _savedTopMost = overlapped.IsAlwaysOnTop; overlapped.IsAlwaysOnTop = true; } catch { }
-                }
-                else
-                {
-                    App.TryLog(new Exception($"[Player] FS: presenter is {appWindow.Presenter.Kind}, not overlapped"));
-                }
-
+                // NOTE: intentionally NOT touching border/titlebar flags here.
+                // FullScreen presenter hides all chrome by itself; flipping
+                // SetBorderAndTitleBar around maximize/restore leaves WinAppSDK
+                // in a broken state (no title bar, floating X over content).
+                // The player window also has min/max disabled, so there is
+                // nothing else to hide.
                 try
                 {
                     appWindow.SetPresenter(Microsoft.UI.Windowing.AppWindowPresenterKind.FullScreen);
@@ -1063,6 +1181,7 @@ public sealed partial class PlayerPage : Page
                 }
 
                 App.TryLog(new Exception($"[Player] FS on: kind={appWindow.Presenter.Kind} bounds={appWindow.Size.Width}x{appWindow.Size.Height}@{appWindow.Position.X},{appWindow.Position.Y}"));
+                try { ApplyWindowChrome(); } catch { }
             }
             catch (Exception ex)
             {
@@ -1100,13 +1219,11 @@ public sealed partial class PlayerPage : Page
                 appWindow.SetPresenter(Microsoft.UI.Windowing.AppWindowPresenterKind.Overlapped);
             }
 
-            // Re-fetch: SetPresenter creates a new presenter instance.
-            // Without restoring border+titlebar the system caption buttons
-            // ( _, □, X ) stay hidden and the top bar layout breaks.
-            if (appWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter overlapped)
+            // SetPresenter creates a new presenter instance, so re-apply
+            // the chromeless policy + drag region + pin on it.
+            if (appWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter)
             {
-                overlapped.SetBorderAndTitleBar(true, true);
-                try { overlapped.IsAlwaysOnTop = _savedTopMost; } catch { }
+                try { ApplyWindowChrome(); } catch { }
             }
 
             var b = _savedBounds;
@@ -1189,16 +1306,41 @@ public sealed partial class PlayerPage : Page
     {
         LoadingPanel.Visibility = Visibility.Visible;
         LoadingRing.Visibility = Visibility.Visible;
+        MirrorButton.Visibility = Visibility.Collapsed;
         StatusText.Text = message;
     }
 
-    private void ShowStatus(string message)
+    private void ShowStatus(string message, bool showMirrorButton = false)
     {
         LoadingPanel.Visibility = Visibility.Visible;
         LoadingRing.Visibility = Visibility.Collapsed;
         StatusText.Text = message;
+        MirrorButton.Visibility = showMirrorButton ? Visibility.Visible : Visibility.Collapsed;
         BigPlayButton.Visibility = Visibility.Visible;
         BigPlayButton.Opacity = 1;
+    }
+
+    private async void MirrorButton_Click(object sender, RoutedEventArgs e)
+    {
+        ReturnFocus();
+        MirrorButton.IsEnabled = false;
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            var applied = await MirrorService.PickAndApplyAsync(Content.XamlRoot, DispatcherQueue, cts.Token);
+            if (applied != null)
+            {
+                await LoadVideoAsync(seekToSaved: false);
+            }
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+        finally
+        {
+            MirrorButton.IsEnabled = true;
+        }
     }
 
     private static string FormatTime(long ms)

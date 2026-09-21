@@ -10,6 +10,7 @@ public sealed partial class SettingsPage : Page
     private bool _initialized;
 
     private const string DonateAddress = "UQBNd1gXEZi4oahqNeJEy18KCUXfVvmBnPgXlokPpzU_PbFQ";
+    private static readonly Uri BoostyUrl = new("https://boosty.to/eddinwork/donate");
 
     public SettingsPage()
     {
@@ -58,6 +59,7 @@ public sealed partial class SettingsPage : Page
         PosterSizeBox.SelectedIndex = posterIndex >= 0 ? posterIndex : 1;
 
         HeadersToggle.IsOn = settings.UseAndroidHeaders;
+        SeriesToggle.IsOn = settings.SeriesUpdatesEnabled;
         VersionText.Text = $"HDREZKA for Windows · {UpdateService.CurrentVersion} (20.09.2026)";
 
         DonateAddressText.Text = DonateAddress;
@@ -69,6 +71,17 @@ public sealed partial class SettingsPage : Page
         catch (Exception ex)
         {
             App.TryLog(ex);
+        }
+
+        try
+        {
+            BoostyQrImage.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(
+                new Uri(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "boosty-qr.png")));
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+            BoostyQrImage.Visibility = Visibility.Collapsed;
         }
 
         _initialized = true;
@@ -101,8 +114,12 @@ public sealed partial class SettingsPage : Page
         DonateHint.Text = Loc.Get("Settings.DonateHint");
         DonateCopyButton.Content = Loc.Get("Common.Copy");
         DonateCopiedText.Visibility = Visibility.Collapsed;
+        BoostyButton.Content = Loc.Get("Settings.DonateBoosty");
         UpdateHeader.Text = Loc.Get("Settings.Updates");
         CheckUpdatesButton.Content = Loc.Get("Settings.CheckUpdates");
+        SeriesHeader.Text = Loc.Get("Settings.SeriesUpdates");
+        SeriesHint.Text = Loc.Get("Settings.SeriesUpdatesHint");
+        CheckSeriesButton.Content = Loc.Get("Settings.CheckNow");
         AboutHeader.Text = Loc.Get("Settings.About");
         DisclaimerText.Text = Loc.Get("Settings.Disclaimer");
         LogoutButton.Content = Loc.Get("Common.Logout");
@@ -182,6 +199,44 @@ public sealed partial class SettingsPage : Page
         RezkaService.Instance.ApplySettings();
     }
 
+    private void SeriesToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (!_initialized) return;
+        SettingsService.Instance.SeriesUpdatesEnabled = SeriesToggle.IsOn;
+        SettingsService.Instance.Save();
+    }
+
+    private async void CheckSeriesButton_Click(object sender, RoutedEventArgs e)
+    {
+        CheckSeriesButton.IsEnabled = false;
+        SeriesStatusText.Text = Loc.Get("Settings.SeriesChecking");
+        try
+        {
+            TrackedSeriesService.SeedFromHistory();
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            var updates = await TrackedSeriesService.CheckForUpdatesAsync(cts.Token);
+            if (updates.Count == 0)
+            {
+                SeriesStatusText.Text = Loc.Get("Settings.SeriesUpToDate");
+            }
+            else
+            {
+                var first = updates.Take(3).Select(u => $"{u.Title}: {u.Text}");
+                SeriesStatusText.Text = Loc.Get("Settings.SeriesFound", updates.Count)
+                    + "\n" + string.Join("\n", first);
+                TrackedSeriesService.NotifyUpdates(updates);
+            }
+        }
+        catch
+        {
+            SeriesStatusText.Text = Loc.Get("Error.Network");
+        }
+        finally
+        {
+            CheckSeriesButton.IsEnabled = true;
+        }
+    }
+
     private void DonateCopyButton_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -229,7 +284,25 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private async void CheckUpdatesButton_Click(object sender, RoutedEventArgs e)    {
+    private void BoostyQrImage_ImageFailed(object sender, ExceptionRoutedEventArgs e)
+    {
+        BoostyQrImage.Visibility = Visibility.Collapsed;
+    }
+
+    private async void BoostyButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await Windows.System.Launcher.LaunchUriAsync(BoostyUrl);
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+    }
+
+    private async void CheckUpdatesButton_Click(object sender, RoutedEventArgs e)
+    {
         CheckUpdatesButton.IsEnabled = false;
         UpdateStatusText.Text = Loc.Get("Settings.Checking");
         try

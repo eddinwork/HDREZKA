@@ -36,32 +36,42 @@
             <ToggleSwitch x:Name="HeadersToggle" Toggled="HeadersToggle_Toggled"/>
             <TextBlock x:Name="HeadersHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
 
+            <TextBlock x:Name="UpdateHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
+            <TextBlock x:Name="UpdateStatusText" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640"/>
+            <Button x:Name="CheckUpdatesButton" Click="CheckUpdatesButton_Click" Margin="0,8,0,0" HorizontalAlignment="Left"/>
+
+            <TextBlock x:Name="SeriesHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
+            <ToggleSwitch x:Name="SeriesToggle" Toggled="SeriesToggle_Toggled"/>
+            <TextBlock x:Name="SeriesHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640"/>
+            <TextBlock x:Name="SeriesStatusText" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640"/>
+            <Button x:Name="CheckSeriesButton" Click="CheckSeriesButton_Click" Margin="0,8,0,0" HorizontalAlignment="Left"/>
+
+            <TextBlock x:Name="AboutHeader" Style="{StaticResource SectionHeader}" Margin="0,24,0,4"/>
+            <TextBlock x:Name="VersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+            <TextBlock x:Name="DisclaimerText" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="0,8,0,0" MaxWidth="640"/>
+
             <TextBlock x:Name="DonateHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
             <TextBlock x:Name="DonateHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640"/>
             <Border CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
                     Padding="16" Margin="0,8,0,0" HorizontalAlignment="Left">
-                <StackPanel Orientation="Horizontal" Spacing="16">
-                    <Image x:Name="DonateQrImage" Width="180" Height="180" Stretch="Uniform"/>
-                    <StackPanel Spacing="8" VerticalAlignment="Center" MaxWidth="380">
+                <StackPanel Orientation="Horizontal" Spacing="28">
+                    <StackPanel Spacing="8" VerticalAlignment="Top">
+                        <Image x:Name="DonateQrImage" Width="150" Height="150" Stretch="Uniform"/>
                         <TextBlock x:Name="DonateAddressText" FontFamily="Consolas" FontSize="12"
-                                   TextWrapping="Wrap" IsTextSelectionEnabled="True"/>
+                                   TextWrapping="Wrap" IsTextSelectionEnabled="True" MaxWidth="220"/>
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Button x:Name="DonateCopyButton" Click="DonateCopyButton_Click" Style="{ThemeResource AccentButtonStyle}"/>
                             <TextBlock x:Name="DonateCopiedText" VerticalAlignment="Center" FontSize="12"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" Visibility="Collapsed"/>
                         </StackPanel>
                     </StackPanel>
+                    <StackPanel Spacing="8" VerticalAlignment="Top">
+                        <Image x:Name="BoostyQrImage" Width="150" Height="150" Stretch="Uniform" ImageFailed="BoostyQrImage_ImageFailed"/>
+                        <Button x:Name="BoostyButton" Click="BoostyButton_Click" Style="{ThemeResource AccentButtonStyle}"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
-
-            <TextBlock x:Name="UpdateHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
-            <TextBlock x:Name="UpdateStatusText" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640"/>
-            <Button x:Name="CheckUpdatesButton" Click="CheckUpdatesButton_Click" Margin="0,8,0,0" HorizontalAlignment="Left"/>
-
-            <TextBlock x:Name="AboutHeader" Style="{StaticResource SectionHeader}" Margin="0,24,0,4"/>
-            <TextBlock x:Name="VersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-            <TextBlock x:Name="DisclaimerText" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="0,8,0,0" MaxWidth="640"/>
 
             <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,20,0,0">
                 <Button x:Name="LogoutButton" Click="LogoutButton_Click"/>

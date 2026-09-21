@@ -16,6 +16,51 @@
           PointerMoved="RootGrid_PointerMoved"
           KeyDown="RootGrid_KeyDown">
 
+        <!-- Adaptive controls: tiny window keeps only Play/Pause + fullscreen,
+             medium and wider shows everything. Last matching state wins. -->
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="ControlSizeStates">
+                <VisualState x:Name="NarrowLayout">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="0"/>
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="PrevButton.Visibility" Value="Collapsed"/>
+                        <Setter Target="NextButton.Visibility" Value="Collapsed"/>
+                        <Setter Target="Sep1.Visibility" Value="Collapsed"/>
+                        <Setter Target="VolumeIcon.Visibility" Value="Collapsed"/>
+                        <Setter Target="VolumeSlider.Visibility" Value="Collapsed"/>
+                        <Setter Target="MuteButton.Visibility" Value="Collapsed"/>
+                        <Setter Target="Sep2.Visibility" Value="Collapsed"/>
+                        <Setter Target="SubtitlesBox.Visibility" Value="Collapsed"/>
+                        <Setter Target="SpeedButton.Visibility" Value="Collapsed"/>
+                        <Setter Target="ZoomButton.Visibility" Value="Collapsed"/>
+                        <Setter Target="ExternalButton.Visibility" Value="Collapsed"/>
+                        <Setter Target="TitleText.MaxWidth" Value="180"/>
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="WideLayout">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="720"/>
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="PrevButton.Visibility" Value="Visible"/>
+                        <Setter Target="NextButton.Visibility" Value="Visible"/>
+                        <Setter Target="Sep1.Visibility" Value="Visible"/>
+                        <Setter Target="VolumeIcon.Visibility" Value="Visible"/>
+                        <Setter Target="VolumeSlider.Visibility" Value="Visible"/>
+                        <Setter Target="MuteButton.Visibility" Value="Visible"/>
+                        <Setter Target="Sep2.Visibility" Value="Visible"/>
+                        <Setter Target="SubtitlesBox.Visibility" Value="Visible"/>
+                        <Setter Target="SpeedButton.Visibility" Value="Visible"/>
+                        <Setter Target="ZoomButton.Visibility" Value="Visible"/>
+                        <Setter Target="ExternalButton.Visibility" Value="Visible"/>
+                        <Setter Target="TitleText.MaxWidth" Value="560"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
         <Border Background="Black" BorderThickness="0" Margin="0" Padding="0"/>
 
         <MediaPlayerElement x:Name="PlayerElement" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
@@ -40,6 +85,8 @@
                 <ProgressRing x:Name="LoadingRing" IsActive="True" Width="56" Height="56" Foreground="White"/>
                 <TextBlock x:Name="StatusText" Foreground="#B3FFFFFF" FontSize="13" HorizontalAlignment="Center"
                            TextTrimming="CharacterEllipsis" TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"/>
+                <Button x:Name="MirrorButton" Click="MirrorButton_Click" HorizontalAlignment="Center" Visibility="Collapsed"
+                        Background="#33FFFFFF" BorderThickness="0" CornerRadius="8" Padding="14,7"/>
             </StackPanel>
         </Grid>
 
@@ -50,7 +97,8 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <Grid x:Name="TopBar" Grid.Row="0" Padding="12,8,16,10" MinHeight="48" Background="#B3000000">
+            <Grid x:Name="TopBar" Grid.Row="0" Padding="12,8,16,10" MinHeight="48" Background="#B3000000"
+                  DoubleTapped="TopBar_DoubleTapped">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
@@ -71,10 +119,18 @@
                     </Border>
                 </StackPanel>
 
-                <ComboBox x:Name="QualityBox" Grid.Column="2" SelectionChanged="QualityBox_SelectionChanged"
-                          MinWidth="118" MaxWidth="180" Padding="8,4"
-                          Foreground="White" Background="#33000000" BorderBrush="#4DFFFFFF"
-                          VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <ComboBox x:Name="QualityBox" SelectionChanged="QualityBox_SelectionChanged"
+                              MinWidth="118" MaxWidth="180" Padding="8,4"
+                              Foreground="White" Background="#33000000" BorderBrush="#4DFFFFFF"
+                              VerticalAlignment="Center"/>
+                    <ToggleButton x:Name="PinButton" Click="PinButton_Click" Background="Transparent" BorderThickness="0" Padding="8">
+                        <FontIcon x:Name="PinIcon" Glyph="&#xE718;" Foreground="White" FontSize="15"/>
+                    </ToggleButton>
+                    <Button x:Name="CloseButton" Click="CloseButton_Click" Background="Transparent" BorderThickness="0" Padding="8">
+                        <FontIcon Glyph="&#xE8BB;" Foreground="White" FontSize="15"/>
+                    </Button>
+                </StackPanel>
             </Grid>
 
             <Grid Grid.Row="1">
@@ -128,9 +184,9 @@
                             <FontIcon Glyph="&#xE76C;" Foreground="White" FontSize="16"/>
                         </Button>
 
-                        <Border Background="#33FFFFFF" Width="1" Height="22" Margin="12,0,12,0"/>
+                        <Border x:Name="Sep1" Background="#33FFFFFF" Width="1" Height="22" Margin="12,0,12,0"/>
 
-                        <FontIcon Glyph="&#xE767;" Foreground="#D9FFFFFF" FontSize="15" VerticalAlignment="Center"/>
+                        <FontIcon x:Name="VolumeIcon" Glyph="&#xE767;" Foreground="#D9FFFFFF" FontSize="15" VerticalAlignment="Center"/>
                         <Slider x:Name="VolumeSlider" Minimum="0" Maximum="100" Width="110"
                                 Style="{StaticResource PlayerSlider}" ValueChanged="VolumeSlider_ValueChanged" Margin="6,0,0,0"/>
 
@@ -138,7 +194,7 @@
                             <FontIcon x:Name="MuteIcon" Glyph="&#xE767;" Foreground="#D9FFFFFF" FontSize="15"/>
                         </Button>
 
-                        <Border Background="#33FFFFFF" Width="1" Height="22" Margin="10,0,10,0"/>
+                        <Border x:Name="Sep2" Background="#33FFFFFF" Width="1" Height="22" Margin="10,0,10,0"/>
 
                         <ComboBox x:Name="SubtitlesBox" SelectionChanged="SubtitlesBox_SelectionChanged"
                                   MinWidth="140" MaxWidth="220" Padding="8,4"

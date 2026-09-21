@@ -41,6 +41,14 @@ public sealed class SettingsService
 
     public DateTime LastUpdateCheckUtc { get; set; }
 
+    /// <summary>Notify about new episodes of watched series.</summary>
+    public bool SeriesUpdatesEnabled { get; set; } = true;
+
+    public DateTime LastSeriesCheckUtc { get; set; }
+
+    /// <summary>Continue-watching list order: oldest first when true.</summary>
+    public bool ContinueOldestFirst { get; set; }
+
     /// <summary>
     /// Poster width in px (S=104, M=132, L=164, XL=196). Height is always 1.5x.
     /// </summary>
@@ -84,6 +92,9 @@ public sealed class SettingsService
             AccountLogin = loaded.AccountLogin ?? "";
             LastNotifiedVersion = loaded.LastNotifiedVersion ?? "";
             LastUpdateCheckUtc = loaded.LastUpdateCheckUtc;
+            SeriesUpdatesEnabled = loaded.SeriesUpdatesEnabled;
+            LastSeriesCheckUtc = loaded.LastSeriesCheckUtc;
+            ContinueOldestFirst = loaded.ContinueOldestFirst;
         }
         catch
         {

@@ -64,8 +64,10 @@ public sealed partial class MainWindow : Window
         ContentFrame.Navigated += ContentFrame_Navigated;
         LocalizationService.Instance.LanguageChanged += ApplyLocalization;
         RezkaService.Instance.AuthStateChanged += () => DispatcherQueue.TryEnqueue(ApplyAccountState);
+        TrackedSeriesService.UpdatesChanged += () => DispatcherQueue.TryEnqueue(UpdateBadge);
         ApplyLocalization();
         ApplyAccountState();
+        UpdateBadge();
 
         ContentFrame.Navigate(typeof(HomePage));
         NavView.SelectedItem = NavHome;
@@ -180,6 +182,7 @@ private void ApplyLocalization()
                 NavBookmarks.Content = Loc.Get("Nav.Bookmarks");
                 NavContinue.Content = Loc.Get("Nav.Continue");
                 NavCollections.Content = Loc.Get("Nav.Collections");
+                NavUpdates.Content = Loc.Get("Nav.Updates");
                 NavAccount.Content = Loc.Get("Nav.Account");
                 NavSettings.Content = Loc.Get("Nav.Settings");
                 SearchBox.PlaceholderText = Loc.Get("Search.Placeholder");
@@ -192,6 +195,19 @@ private void ApplyLocalization()
         NavAccount.Content = RezkaService.Instance.IsLoggedIn
             ? Loc.Get("Nav.Account")
             : Loc.Get("Common.Login");
+    }
+
+    private void UpdateBadge()
+    {
+        try
+        {
+            var count = TrackedSeriesService.UnreadCount;
+            UpdatesBadge.Value = count;
+            UpdatesBadge.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+        catch
+        {
+        }
     }
 
 private void ContentFrame_Navigated(object sender, NavigationEventArgs e)
@@ -207,6 +223,7 @@ private void ContentFrame_Navigated(object sender, NavigationEventArgs e)
                 var t when t == typeof(SettingsPage) => "Settings",
                 var t when t == typeof(ContinueWatchingPage) => "Continue",
                 var t when t == typeof(CollectionsPage) => "Collections",
+                var t when t == typeof(UpdatesPage) => "Updates",
                 var t when t == typeof(AccountPage) => "Account",
                 _ => (string?)null,
             };
@@ -225,6 +242,7 @@ else
                     "Settings" => NavSettings,
                     "Continue" => NavContinue,
                     "Collections" => NavCollections,
+                    "Updates" => NavUpdates,
                     "Account" => NavAccount,
                     _ => null,
                 };
@@ -266,6 +284,9 @@ else
                 break;
             case "Collections":
                 if (ContentFrame.Content is not CollectionsPage) ContentFrame.Navigate(typeof(CollectionsPage));
+                break;
+            case "Updates":
+                if (ContentFrame.Content is not UpdatesPage) ContentFrame.Navigate(typeof(UpdatesPage));
                 break;
             case "Account":
                 if (RezkaService.Instance.IsLoggedIn)
