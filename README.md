@@ -27,6 +27,9 @@
 
 ## Скриншоты
 
+<details>
+<summary>Показать скриншоты</summary>
+
 ![Главная](screenshots/home.png)
 ![Каталог](screenshots/catalog.png)
 ![Закладки](screenshots/bookmarks.png)
@@ -35,6 +38,8 @@
 ![Плеер](screenshots/player.png)
 ![Плеер в работе](screenshots/player-controls.png)
 
+</details>
+
 ## Системные требования
 
 - Windows 10 версии 19041+ / Windows 11, x64
@@ -42,50 +47,27 @@
 
 ## Установка
 
-1. Скачайте `HDREZKA-Setup-1.3.0.exe` из раздела [Releases](../../releases).
-2. Запустите и укажите папку установки.
-3. Ярлыки появятся в меню «Пуск» (и на рабочем столе — опционально).
+Вариант 1 — установщик: скачайте `HDREZKA-Setup-1.3.0.exe` из раздела [Releases](../../releases), запустите и укажите папку. Ярлыки появятся в меню «Пуск» (и на рабочем столе — опционально).
 
-## Сборка из исходников
+Вариант 2 — portable: скачайте `HDREZKA-1.3.0-portable-win-x64.zip`, распакуйте и запустите `HDREZKA.App.exe`. Настройки хранятся в `%AppData%/HDREZKA`.
+
+## Частые вопросы
+
+**Ошибка 403 / «Сайт ограничил доступ».** Зеркало не отвечает вашему региону или сети. Откройте «Настройки → Подобрать автоматически» — программа сама найдет рабочее зеркало. При повторных ошибках та же кнопка есть на экране ошибки и в диалоге входа.
+
+**Ошибка сети в плеере на отдельных фильмах.** Ссылки на видео лежат на CDN за зеркалом, и конкретный CDN-узел может быть недоступен. Нажмите «Подобрать автоматически» прямо под ошибкой или выберите другое качество.
+
+**ПК уходит в сон при просмотре.** Пока идет воспроизведение, программа запрещает сон. На паузе сон работает как обычно.
+
+## Для разработчиков
 
 ```bash
-# Debug-сборка
-dotnet build src/HDREZKA.App/HDREZKA.App.csproj
-
-# Запуск
-dotnet run --project src/HDREZKA.App/HDREZKA.App.csproj
-
-# Тесты
-dotnet test tests/HDREZKA.Tests/HDREZKA.Tests.csproj
-
-# Релизная публикация (папка для установщика)
-dotnet publish src/HDREZKA.App/HDREZKA.App.csproj -c Release
+dotnet build src/HDREZKA.App/HDREZKA.App.csproj   # сборка
+dotnet test tests/HDREZKA.Tests/HDREZKA.Tests.csproj  # тесты
+dotnet publish src/HDREZKA.App/HDREZKA.App.csproj -c Release  # папка для установщика
 ```
 
-Требуется .NET 8 SDK (или новее).
-
-### Установщик
-
-Скрипт Inno Setup лежит в `installer/installer.iss`. Для сборки `Setup.exe`:
-
-1. Опубликуйте релиз (команда выше).
-2. Установите [Inno Setup 6](https://jrsoftware.org/isinfo.php).
-3. Откройте `installer/installer.iss` и нажмите Compile.
-
-## Структура
-
-```
-src/
-  HDREZKA.App/      # WinUI 3 приложение (XAML + C#)
-    Views/          # Страницы: Home, Catalog, Search, Details, Player, Bookmarks, ...
-    Controls/       # Переиспользуемые карточки
-    Services/       # Настройки, сеть, локализация, навигация
-  HDREZKA.Core/     # API-клиент сайта, парсеры
-tests/
-  HDREZKA.Tests/    # Юнит-тесты парсеров
-installer/
-  installer.iss     # Скрипт установщика (Inno Setup 6)
-```
+Требуется .NET 8 SDK (или новее). Установщик собирается скриптом `installer/installer.iss` через [Inno Setup 6](https://jrsoftware.org/isinfo.php). Структура: `src/HDREZKA.App` (WinUI 3: Views, Controls, Services), `src/HDREZKA.Core` (API-клиент и парсеры), `tests/HDREZKA.Tests`.
 
 ## Дисклеймер
 
@@ -93,13 +75,15 @@ installer/
 
 ## Донаты
 
-Если приложение полезно — поддержите разработку донатом в TON (принимаются любые токены сети TON):
+Если приложение полезно — поддержите разработку:
 
-```
-UQBNd1gXEZi4oahqNeJEy18KCUXfVvmBnPgXlokPpzU_PbFQ
-```
+- Крипта в TON (любые токены сети TON):
+  ```
+  UQBNd1gXEZi4oahqNeJEy18KCUXfVvmBnPgXlokPpzU_PbFQ
+  ```
+- Подписка на Boosty: https://boosty.to/eddinwork/donate
 
-QR-код — в разделе «Настройки → Поддержать проект».
+QR-коды — в разделе «Настройки → Поддержать проект».
 
 ## Лицензия
 
