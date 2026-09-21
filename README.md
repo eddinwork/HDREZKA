@@ -5,8 +5,8 @@
 ![version](https://img.shields.io/badge/version-1.2.0-blue) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-lightgrey) ![license](https://img.shields.io/badge/license-MIT-green)
 
 ## Контакты для связи:
-Группа в Telegram: https://t.me/hdrezkawin
-Threads: https://www.threads.com/@ados86rus?invite=0
+- Группа в Telegram: https://t.me/hdrezkawin
+- Threads: https://www.threads.com/@ados86rus?invite=0
 
 ## Возможности
 
