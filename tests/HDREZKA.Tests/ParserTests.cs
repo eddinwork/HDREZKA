@@ -119,6 +119,155 @@ public class ParserTests
     }
 
     [Fact]
+    public void ParseDetails_WatchAlsoAndVoiceRatings_Works()
+    {
+        var html = """
+            <html><body>
+            <div id="wrapper">
+            <div class="b-content__main">
+              <div class="b-post__title">Тестовый фильм</div>
+              <input type="hidden" id="ctrl_favs" value="favs1">
+              <span class="b-rgstats__help" title="&lt;div&gt;&lt;div class=&quot;inner&quot;&gt;&lt;div class=&quot;title&quot;&gt;Дубляж&lt;/div&gt;&lt;div class=&quot;count&quot;&gt;75,5%&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;inner&quot;&gt;&lt;div class=&quot;title&quot;&gt;Многоголосый&lt;/div&gt;&lt;div class=&quot;count&quot;&gt;24%&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;"></span>
+            </div>
+            <div class="b-sidelist__holder">
+              <div class="b-content__inline_item" data-url="https://hdrzk.org/films/777-other.html">
+                <div class="b-content__inline_item-cover">
+                  <a href="https://hdrzk.org/films/777-other.html">
+                    <img src="https://cdn.example.org/posters/7.jpg">
+                    <span class="cat films"><span class="b-category-bestrating">7.1</span></span>
+                  </a>
+                </div>
+                <div class="b-content__inline_item-link"><a href="#">Другой фильм</a><div>2025</div></div>
+              </div>
+            </div>
+            <div id="comments-list-button">Комментарии <em>0</em></div>
+            </div></body></html>
+            """;
+
+        var details = Parsers.ParseDetails(html, "films/999-test-movie.html");
+
+        Assert.NotNull(details.WatchAlso);
+        Assert.Single(details.WatchAlso!);
+        Assert.Equal("films/777-other.html", details.WatchAlso![0].Id);
+        Assert.Equal("Другой фильм", details.WatchAlso![0].Name);
+
+        Assert.NotNull(details.VoiceActingRatings);
+        Assert.Equal(2, details.VoiceActingRatings!.Count);
+        Assert.Equal("Дубляж", details.VoiceActingRatings![0].Name);
+        Assert.Equal(75.5f, details.VoiceActingRatings![0].Percent);
+        Assert.Equal("Многоголосый", details.VoiceActingRatings![1].Name);
+        Assert.Equal(24f, details.VoiceActingRatings![1].Percent);
+    }
+
+    [Fact]
+    public void ParsePerson_Works()
+    {
+        var html = """
+            <html><body>
+            <div id="wrapper">
+              <div class="b-post__title"><span class="t1">Актёр Тестовый</span><span class="t2">Actor Test</span></div>
+              <div class="b-post__infotable_left"><div class="b-sidecover"><a href="https://cdn.example.org/big_actor.jpg"><img src="https://cdn.example.org/actor.jpg"></a></div></div>
+              <table class="b-post__infotable_right_inner">
+                <tr><td><h2>Карьера</h2></td><td>актер</td></tr>
+                <tr><td><h2>Дата рождения</h2></td><td>1 января 1980</td></tr>
+                <tr><td><h2>Рост</h2></td><td>180 см</td></tr>
+              </table>
+              <div class="b-person__career">
+                <h2 id="akter">Актер</h2>
+                <div class="b-content__inline_item" data-url="https://hdrzk.org/films/111-film.html">
+                  <div class="b-content__inline_item-cover"><a href="https://hdrzk.org/films/111-film.html"><img src="https://cdn.example.org/p.jpg"></a></div>
+                  <div class="b-content__inline_item-link"><a href="#">Фильм</a><div>2020</div></div>
+                </div>
+              </div>
+            </div>
+            </body></html>
+            """;
+
+        var person = Parsers.ParsePerson(html, "person/42-actor-test.html");
+
+        Assert.Equal("Актёр Тестовый", person.Name);
+        Assert.Equal("Actor Test", person.OriginalName);
+        Assert.Equal("https://cdn.example.org/actor.jpg", person.Photo);
+        Assert.Equal("актер", person.Career);
+        Assert.Equal("1 января 1980", person.BirthDate);
+        Assert.Equal("180 см", person.Height);
+        Assert.Null(person.DeathDate);
+        Assert.NotNull(person.Filmography);
+        Assert.Single(person.Filmography!);
+        Assert.Equal("akter", person.Filmography![0].RoleId);
+        Assert.Single(person.Filmography![0].Movies);
+        Assert.Equal("films/111-film.html", person.Filmography![0].Movies[0].Id);
+    }
+
+    [Fact]
+    public void ParseDetails_PersonRows_Agnostic_Works()
+    {
+        var html = """
+            <html><body>
+            <div id="wrapper">
+            <div class="b-content__main">
+              <div class="b-post__title">Тестовый фильм</div>
+              <table class="b-post__info">
+                <tr><td class="l">Режиссёр:</td><td><div class="persons-list-holder"><div class="item"><a href="https://hdrzk.org/person/1-dir.html">Режиссёр</a></div></div></td></tr>
+                <tr><td class="l">В ролях:</td><td><div><div class="item"><a href="https://hdrzk.org/person/2-actor.html">Актёр</a></div><div class="item"><a href="https://hdrzk.org/person/3-actress.html">Актриса</a></div></div></td></tr>
+              </table>
+              <input type="hidden" id="ctrl_favs" value="f1">
+              <div id="comments-list-button">Комментарии <em>0</em></div>
+            </div>
+            </div></body></html>
+            """;
+
+        var details = Parsers.ParseDetails(html, "films/999-test.html");
+
+        Assert.NotNull(details.Producers);
+        Assert.Single(details.Producers!);
+        Assert.Equal("person/1-dir.html", details.Producers![0].Id);
+        Assert.NotNull(details.Actors);
+        Assert.Equal(2, details.Actors!.Count);
+        Assert.Equal("person/2-actor.html", details.Actors![0].Id);
+        Assert.Equal("Актёр", details.Actors![0].Name);
+    }
+
+    [Fact]
+    public void ParseSchedule_Works_And_FindsNext()
+    {
+        var html = """
+            <html><body>
+            <div id="wrapper">
+            <div class="b-content__main">
+              <div class="b-post__title">Тестовый сериал</div>
+              <input type="hidden" id="ctrl_favs" value="f1">
+              <div class="b-post__schedule_block">
+                <div class="b-post__schedule_block_title"><span class="title">Даты выхода серий 1 сезона</span></div>
+                <table><tbody>
+                  <tr><td class="td-1">1 сезон 1 серия</td><td class="td-2"><b>Зима близко</b><span>Winter Is Coming</span></td><td class="td-4">18 апреля 2011</td></tr>
+                  <tr><td class="td-1">1 сезон 2 серия</td><td class="td-2"><b>Королевский тракт</b><span></span></td><td class="td-4">25 апреля 2011</td></tr>
+                </tbody></table>
+              </div>
+            </div>
+            <div id="comments-list-button">Комментарии <em>0</em></div>
+            </div></body></html>
+            """;
+
+        var details = Parsers.ParseDetails(html, "series/1-test.html");
+
+        Assert.NotNull(details.Schedule);
+        Assert.Single(details.Schedule!);
+        Assert.Equal("Даты выхода серий 1 сезона", details.Schedule![0].Name);
+        Assert.Equal(2, details.Schedule![0].Items.Count);
+        Assert.Equal("Зима близко", details.Schedule![0].Items[0].RussianName);
+        Assert.Equal("Winter Is Coming", details.Schedule![0].Items[0].OriginalName);
+        Assert.Null(details.Schedule![0].Items[1].OriginalName);
+
+        var next = Parsers.FindNextRelease(details.Schedule!, new DateTime(2011, 4, 20));
+        Assert.NotNull(next);
+        Assert.Equal(new DateTime(2011, 4, 25), next!.Value.Date);
+
+        var none = Parsers.FindNextRelease(details.Schedule!, new DateTime(2020, 1, 1));
+        Assert.Null(none);
+    }
+
+    [Fact]
     public void ParseSeasonsResponse_Json_Works()
     {
         var seasonsHtml = "<ul id='simple-seasons-tabs'><li class='b-simple_season__item active' data-tab_id='1'>1 сезон</li><li class='b-simple_season__item' data-tab_id='2'>2 сезон</li></ul>";

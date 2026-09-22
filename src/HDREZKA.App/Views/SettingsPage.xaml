@@ -8,74 +8,127 @@
     mc:Ignorable="d">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Padding="36,16,36,24" Spacing="4" MaxWidth="900" HorizontalAlignment="Left">
+        <StackPanel Padding="36,16,36,24" Spacing="8" MaxWidth="900" HorizontalAlignment="Left">
             <TextBlock x:Name="TitleText" FontSize="28" FontWeight="Bold"/>
 
-            <TextBlock x:Name="MirrorHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
-            <TextBox x:Name="MirrorBox" PlaceholderText="https://hdrzk.org/" LostFocus="MirrorBox_LostFocus" MaxWidth="480" HorizontalAlignment="Left"/>
-            <TextBlock x:Name="MirrorHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
-                <Button x:Name="AutoMirrorButton" Click="AutoMirrorButton_Click" HorizontalAlignment="Left"/>
-                <TextBlock x:Name="MirrorStatusText" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                           VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="480"/>
-            </StackPanel>
-
-            <TextBlock x:Name="LanguageHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
-            <ComboBox x:Name="LanguageBox" MinWidth="220" SelectionChanged="LanguageBox_SelectionChanged"/>
-
-            <TextBlock x:Name="ThemeHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
-            <ComboBox x:Name="ThemeBox" MinWidth="220" SelectionChanged="ThemeBox_SelectionChanged"/>
-
-            <TextBlock x:Name="QualityHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
-            <ComboBox x:Name="QualityBox" MinWidth="220" SelectionChanged="QualityBox_SelectionChanged"/>
-
-            <TextBlock x:Name="PosterSizeHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
-            <ComboBox x:Name="PosterSizeBox" MinWidth="220" SelectionChanged="PosterSizeBox_SelectionChanged"/>
-
-            <TextBlock x:Name="HeadersHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
-            <ToggleSwitch x:Name="HeadersToggle" Toggled="HeadersToggle_Toggled"/>
-            <TextBlock x:Name="HeadersHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-
-            <TextBlock x:Name="UpdateHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
-            <TextBlock x:Name="UpdateStatusText" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640"/>
-            <Button x:Name="CheckUpdatesButton" Click="CheckUpdatesButton_Click" Margin="0,8,0,0" HorizontalAlignment="Left"/>
-
-            <TextBlock x:Name="SeriesHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
-            <ToggleSwitch x:Name="SeriesToggle" Toggled="SeriesToggle_Toggled"/>
-            <TextBlock x:Name="SeriesHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640"/>
-            <TextBlock x:Name="SeriesStatusText" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640"/>
-            <Button x:Name="CheckSeriesButton" Click="CheckSeriesButton_Click" Margin="0,8,0,0" HorizontalAlignment="Left"/>
-
-            <TextBlock x:Name="AboutHeader" Style="{StaticResource SectionHeader}" Margin="0,24,0,4"/>
-            <TextBlock x:Name="VersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-            <TextBlock x:Name="DisclaimerText" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="0,8,0,0" MaxWidth="640"/>
-
-            <TextBlock x:Name="DonateHeader" Style="{StaticResource SectionHeader}" Margin="0,20,0,4"/>
-            <TextBlock x:Name="DonateHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640"/>
-            <Border CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
-                    Padding="16" Margin="0,8,0,0" HorizontalAlignment="Left">
-                <StackPanel Orientation="Horizontal" Spacing="28">
-                    <StackPanel Spacing="8" VerticalAlignment="Top">
-                        <Image x:Name="DonateQrImage" Width="150" Height="150" Stretch="Uniform"/>
-                        <TextBlock x:Name="DonateAddressText" FontFamily="Consolas" FontSize="12"
-                                   TextWrapping="Wrap" IsTextSelectionEnabled="True" MaxWidth="220"/>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button x:Name="DonateCopyButton" Click="DonateCopyButton_Click" Style="{ThemeResource AccentButtonStyle}"/>
-                            <TextBlock x:Name="DonateCopiedText" VerticalAlignment="Center" FontSize="12"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" Visibility="Collapsed"/>
-                        </StackPanel>
+            <Expander x:Name="ConnectionExpander" IsExpanded="True" Margin="0,12,0,0"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <Expander.Header>
+                    <TextBlock x:Name="ConnectionHeader" Style="{StaticResource SectionHeader}"/>
+                </Expander.Header>
+                <StackPanel Spacing="4">
+                    <TextBlock x:Name="MirrorHeader" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                    <TextBox x:Name="MirrorBox" PlaceholderText="https://hdrzk.org/" LostFocus="MirrorBox_LostFocus" MaxWidth="480" HorizontalAlignment="Left"/>
+                    <TextBlock x:Name="MirrorHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
+                        <Button x:Name="AutoMirrorButton" Click="AutoMirrorButton_Click" HorizontalAlignment="Left"/>
+                        <TextBlock x:Name="MirrorStatusText" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="480"/>
                     </StackPanel>
-                    <StackPanel Spacing="8" VerticalAlignment="Top">
-                        <Image x:Name="BoostyQrImage" Width="150" Height="150" Stretch="Uniform" ImageFailed="BoostyQrImage_ImageFailed"/>
-                        <Button x:Name="BoostyButton" Click="BoostyButton_Click" Style="{ThemeResource AccentButtonStyle}"/>
-                    </StackPanel>
+                    <TextBlock x:Name="HeadersHeader" FontWeight="SemiBold" Margin="0,12,0,0"/>
+                    <ToggleSwitch x:Name="HeadersToggle" Toggled="HeadersToggle_Toggled"/>
+                    <TextBlock x:Name="HeadersHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>
-            </Border>
+            </Expander>
 
-            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,20,0,0">
-                <Button x:Name="LogoutButton" Click="LogoutButton_Click"/>
-            </StackPanel>
+            <Expander x:Name="InterfaceExpander" IsExpanded="True"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <Expander.Header>
+                    <TextBlock x:Name="InterfaceHeader" Style="{StaticResource SectionHeader}"/>
+                </Expander.Header>
+                <StackPanel Spacing="4">
+                    <TextBlock x:Name="LanguageHeader" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                    <ComboBox x:Name="LanguageBox" MinWidth="220" SelectionChanged="LanguageBox_SelectionChanged"/>
+
+                    <TextBlock x:Name="ThemeHeader" FontWeight="SemiBold" Margin="0,12,0,0"/>
+                    <ComboBox x:Name="ThemeBox" MinWidth="220" SelectionChanged="ThemeBox_SelectionChanged"/>
+
+                    <TextBlock x:Name="PosterSizeHeader" FontWeight="SemiBold" Margin="0,12,0,0"/>
+                    <ComboBox x:Name="PosterSizeBox" MinWidth="220" SelectionChanged="PosterSizeBox_SelectionChanged"/>
+
+                    <TextBlock x:Name="HomeHeader" FontWeight="SemiBold" Margin="0,12,0,0"/>
+                    <TextBlock x:Name="HomeHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640"/>
+                    <StackPanel x:Name="HomeSectionsList" Spacing="4" Margin="0,8,0,0" MaxWidth="480" HorizontalAlignment="Left"/>
+                </StackPanel>
+            </Expander>
+
+            <Expander x:Name="PlaybackExpander" IsExpanded="True"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <Expander.Header>
+                    <TextBlock x:Name="PlaybackHeader" Style="{StaticResource SectionHeader}"/>
+                </Expander.Header>
+                <StackPanel Spacing="4">
+                    <TextBlock x:Name="QualityHeader" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                    <ComboBox x:Name="QualityBox" MinWidth="220" SelectionChanged="QualityBox_SelectionChanged"/>
+                    <CheckBox x:Name="DirectPlayCheck" Margin="0,8,0,0" Checked="DirectPlayCheck_Changed" Unchecked="DirectPlayCheck_Changed"/>
+                </StackPanel>
+            </Expander>
+
+            <Expander x:Name="SeriesExpander" IsExpanded="False"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <Expander.Header>
+                    <TextBlock x:Name="SeriesHeader" Style="{StaticResource SectionHeader}"/>
+                </Expander.Header>
+                <StackPanel Spacing="4">
+                    <ToggleSwitch x:Name="SeriesToggle" Toggled="SeriesToggle_Toggled"/>
+                    <TextBlock x:Name="SeriesHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640"/>
+                    <TextBlock x:Name="SeriesStatusText" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640"/>
+                    <Button x:Name="CheckSeriesButton" Click="CheckSeriesButton_Click" Margin="0,8,0,0" HorizontalAlignment="Left"/>
+                </StackPanel>
+            </Expander>
+
+            <Expander x:Name="UpdateExpander" IsExpanded="False"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <Expander.Header>
+                    <TextBlock x:Name="UpdateHeader" Style="{StaticResource SectionHeader}"/>
+                </Expander.Header>
+                <StackPanel Spacing="4">
+                    <TextBlock x:Name="UpdateStatusText" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640"/>
+                    <Button x:Name="CheckUpdatesButton" Click="CheckUpdatesButton_Click" Margin="0,8,0,0" HorizontalAlignment="Left"/>
+                </StackPanel>
+            </Expander>
+
+            <Expander x:Name="DonateExpander" IsExpanded="False"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <Expander.Header>
+                    <TextBlock x:Name="DonateHeader" Style="{StaticResource SectionHeader}"/>
+                </Expander.Header>
+                <StackPanel Spacing="4">
+                    <TextBlock x:Name="DonateHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640"/>
+                    <Border CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                            Padding="16" Margin="0,8,0,0" HorizontalAlignment="Left">
+                        <StackPanel Orientation="Horizontal" Spacing="28">
+                            <StackPanel Spacing="8" VerticalAlignment="Top">
+                                <Image x:Name="DonateQrImage" Width="150" Height="150" Stretch="Uniform"/>
+                                <TextBlock x:Name="DonateAddressText" FontFamily="Consolas" FontSize="12"
+                                           TextWrapping="Wrap" IsTextSelectionEnabled="True" MaxWidth="220"/>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="DonateCopyButton" Click="DonateCopyButton_Click" Style="{ThemeResource AccentButtonStyle}"/>
+                                    <TextBlock x:Name="DonateCopiedText" VerticalAlignment="Center" FontSize="12"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" Visibility="Collapsed"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <StackPanel Spacing="8" VerticalAlignment="Top">
+                                <Image x:Name="BoostyQrImage" Width="150" Height="150" Stretch="Uniform" ImageFailed="BoostyQrImage_ImageFailed"/>
+                                <Button x:Name="BoostyButton" Click="BoostyButton_Click" Style="{ThemeResource AccentButtonStyle}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Expander>
+
+            <Expander x:Name="AboutExpander" IsExpanded="True"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <Expander.Header>
+                    <TextBlock x:Name="AboutHeader" Style="{StaticResource SectionHeader}"/>
+                </Expander.Header>
+                <StackPanel Spacing="4">
+                    <TextBlock x:Name="VersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock x:Name="DisclaimerText" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="0,8,0,0" MaxWidth="640"/>
+                    <Button x:Name="LogoutButton" Click="LogoutButton_Click" Margin="0,12,0,0" HorizontalAlignment="Left"/>
+                </StackPanel>
+            </Expander>
         </StackPanel>
     </ScrollViewer>
 </Page>

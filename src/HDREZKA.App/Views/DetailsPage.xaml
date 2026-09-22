@@ -48,7 +48,13 @@
                 </Grid>
 
                 <StackPanel x:Name="VoicesPanel" Spacing="8" Visibility="Collapsed">
-                    <TextBlock x:Name="VoicesHeader" Style="{StaticResource SectionHeader}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock x:Name="VoicesHeader" Style="{StaticResource SectionHeader}" VerticalAlignment="Center"/>
+                        <Button x:Name="VoicesRatingButton" Click="VoicesRatingButton_Click" Visibility="Collapsed"
+                                Background="Transparent" BorderThickness="0" Padding="6" VerticalAlignment="Center">
+                            <FontIcon Glyph="&#xE946;" FontSize="15"/>
+                        </Button>
+                    </StackPanel>
                     <ScrollViewer HorizontalScrollBarVisibility="Hidden" HorizontalScrollMode="Auto"
                                   VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
                         <StackPanel x:Name="VoicesList" Orientation="Horizontal" Spacing="8"/>
@@ -97,6 +103,23 @@
                             <TextBlock x:Name="TrackText"/>
                         </StackPanel>
                     </ToggleButton>
+                </StackPanel>
+
+                <StackPanel x:Name="SchedulePanel" Spacing="8" Margin="0,20,0,0" Visibility="Collapsed">
+                    <TextBlock x:Name="ScheduleHeader" Style="{StaticResource SectionHeader}"/>
+                    <TextBlock x:Name="ScheduleCountdownText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Visibility="Collapsed"/>
+                    <TextBlock x:Name="ScheduleGroupText" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <StackPanel x:Name="ScheduleList" Spacing="0"/>
+                    <Button x:Name="ScheduleMoreButton" Click="ScheduleMoreButton_Click" Visibility="Collapsed"
+                            Background="Transparent" BorderThickness="0" Padding="8,4" HorizontalAlignment="Left"/>
+                </StackPanel>
+
+                <StackPanel x:Name="WatchAlsoPanel" Spacing="8" Margin="0,20,0,0" Visibility="Collapsed">
+                    <TextBlock x:Name="WatchAlsoHeader" Style="{StaticResource SectionHeader}"/>
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Auto"
+                                  VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="WatchAlsoList" Orientation="Horizontal"/>
+                    </ScrollViewer>
                 </StackPanel>
 
                 <StackPanel x:Name="CommentsSection" Spacing="10" Margin="0,20,0,0" Visibility="Collapsed">

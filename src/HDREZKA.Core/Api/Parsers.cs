@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Text;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
@@ -211,6 +212,10 @@ public static class Parsers
 
         IReadOnlyList<MovieSeason>? seasons = isAvailable && !isComingSoon ? ParseSeasonsFromDocument(doc) : null;
 
+        var voiceRatings = isComingSoon ? null : ParseVoiceActingRatings(doc);
+        var watchAlso = ParseWatchAlso(doc);
+        var schedule = isComingSoon ? null : ParseSchedule(doc);
+
         var isRated = content.QuerySelectorAll(".b-post__rating .b-post__rating_wrapper").Length == 0;
         var siteRatingValue = ToFloat(content.QuerySelector(".b-post__rating .num")?.TextContent);
         var siteRatingVotes = content.QuerySelector(".b-post__rating .votes span") is { } v ? ShortNumber(Text(v)) : null;
@@ -235,7 +240,7 @@ public static class Parsers
                 {
                     var labelEl = tds[i];
                     var valueEl = tds[i + 1];
-                    var label = StripNonLetters(Text(labelEl));
+                    var label = StripNonLetters(Text(labelEl)).Replace('ё', 'е').Replace('Ё', 'Е');
 
                     switch (label)
                     {
@@ -250,7 +255,7 @@ public static class Parsers
                             year = Text(valueEl);
                             break;
                         case "Режиссер":
-                            producers = ParsePersons(valueEl);
+                            producers = MergePersons(producers, ParsePersons(valueEl));
                             break;
                         case "Возраст":
                             ageRestriction = valueEl.QuerySelector("span") is { } a ? Text(a) : Text(valueEl);
@@ -270,9 +275,14 @@ public static class Parsers
                             slogan = Text(valueEl);
                             break;
                         default:
-                            if (label == "Вролях")
+                            // Actors row has no stable label/structure across mirrors
+                            // (items may sit outside .persons-list-holder): any value
+                            // cell with person items that isn't the director row
+                            // is treated as cast, like the reference client does.
+                            var rowPersons = ParsePersons(valueEl);
+                            if (rowPersons.Count > 0)
                             {
-                                actors = ParsePersons(valueEl);
+                                actors = MergePersons(actors, rowPersons);
                             }
 
                             break;
@@ -310,7 +320,10 @@ public static class Parsers
             IsComingSoon = isComingSoon,
             IsRated = isRated,
             VoiceActings = voices,
+            VoiceActingRatings = voiceRatings,
             Seasons = seasons,
+            WatchAlso = watchAlso.Count > 0 ? watchAlso : null,
+            Schedule = schedule,
             Adb = adb,
             TypeId = typeId,
             Favs = favs,
@@ -360,6 +373,17 @@ public static class Parsers
             if (href == null) continue;
             var photo = item.QuerySelector(".person-name-item")?.GetAttribute("data-photo");
             result.Add(new PersonSimple(href, Text(a), photo == "null" ? null : photo));
+        }
+
+        return result;
+    }
+
+    private static List<PersonSimple> MergePersons(IReadOnlyList<PersonSimple>? current, IReadOnlyList<PersonSimple> add)
+    {
+        var result = current?.ToList() ?? [];
+        foreach (var p in add)
+        {
+            if (result.All(x => x.Id != p.Id)) result.Add(p);
         }
 
         return result;
@@ -437,6 +461,168 @@ public static class Parsers
         if (file.Contains("kz")) return name + " 🇰🇿";
         if (file.Contains("ru")) return name + " 🇷🇺";
         return name;
+    }
+
+    internal static IReadOnlyList<MovieSimple> ParseWatchAlso(IDocument doc) =>
+        doc.QuerySelectorAll(".b-sidelist__holder .b-content__inline_item")
+            .Select(ParseInlineItem)
+            .Where(m => m.Id.Length > 0)
+            .ToList();
+
+    internal static IReadOnlyList<MovieVoiceActingRating>? ParseVoiceActingRatings(IDocument doc)    {
+        // Rating popup lives in the title attribute (HTML-escaped) of .b-rgstats__help.
+        var encoded = doc.QuerySelector(".b-rgstats__help")?.GetAttribute("title");
+        if (string.IsNullOrEmpty(encoded)) return null;
+
+        var frag = ParseHtml(WebUtility.HtmlDecode(encoded));
+        var result = new List<MovieVoiceActingRating>();
+        foreach (var inner in frag.QuerySelectorAll(".inner"))
+        {
+            var titleEl = inner.QuerySelector(".title");
+            if (titleEl == null) continue;
+            var percent = ToFloat(inner.QuerySelector(".count")?.TextContent.Replace("%", ""));
+            if (percent == null) continue;
+            var img = inner.QuerySelector("img")?.GetAttribute("src");
+            result.Add(new MovieVoiceActingRating(AddFlag(Text(titleEl), img), percent.Value));
+        }
+
+        return result.Count > 0 ? result : null;
+    }
+
+    // ---------- schedule ----------
+
+    public static IReadOnlyList<SeriesScheduleGroup>? ParseSchedule(IDocument doc)
+    {
+        var blocks = doc.QuerySelectorAll(".b-post__schedule_block");
+        if (blocks.Length == 0) return null;
+
+        var groups = new List<SeriesScheduleGroup>();
+        foreach (var block in blocks)
+        {
+            var name = block.QuerySelector(".b-post__schedule_block_title .title") is { } t ? Text(t) : "";
+            var items = new List<SeriesScheduleItem>();
+            foreach (var row in block.QuerySelectorAll("tr"))
+            {
+                var title = row.QuerySelector(".td-1") is { } td1 ? Text(td1) : "";
+                if (title.Length == 0) continue;
+                var ruName = row.QuerySelector(".td-2 b") is { } b ? Text(b) : "";
+                var origEl = row.QuerySelector(".td-2 span");
+                var origName = origEl != null && Text(origEl).Length > 0 ? Text(origEl) : null;
+                var date = row.QuerySelector(".td-4") is { } td4 ? Text(td4) : "";
+                items.Add(new SeriesScheduleItem(title, ruName, origName, date));
+            }
+
+            if (items.Count > 0) groups.Add(new SeriesScheduleGroup(name, items));
+        }
+
+        return groups.Count > 0 ? groups : null;
+    }
+
+    private static readonly string[] ScheduleDateFormats =
+    [
+        "d MMMM yyyy", "dd MMMM yyyy", "d MMM yyyy",
+        "d.M.yyyy", "dd.MM.yyyy", "d-M-yyyy", "yyyy-M-d",
+    ];
+
+    public static DateTime? ParseScheduleDate(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        if (DateTime.TryParseExact(text.Trim(), ScheduleDateFormats,
+                CultureInfo.GetCultureInfo("ru-RU"),
+                DateTimeStyles.None, out var exact))
+        {
+            return exact.Date;
+        }
+
+        return null;
+    }
+
+    public static (DateTime Date, SeriesScheduleItem Item)? FindNextRelease(
+        IReadOnlyList<SeriesScheduleGroup> groups, DateTime today)
+    {
+        DateTime? best = null;
+        SeriesScheduleItem? bestItem = null;
+        foreach (var item in groups.SelectMany(g => g.Items))
+        {
+            var date = ParseScheduleDate(item.ReleaseDate);
+            if (date == null || date.Value < today.Date) continue;
+            if (best == null || date.Value < best.Value)
+            {
+                best = date.Value;
+                bestItem = item;
+            }
+        }
+
+        return best != null && bestItem != null ? (best.Value, bestItem) : null;
+    }
+
+    // ---------- person ----------
+
+    public static PersonDetailed ParsePerson(string html, string pagePath)
+    {
+        var doc = ParseHtml(html);
+        CheckDocument(doc);
+
+        var titleEl = doc.QuerySelector(".b-post__title");
+        var name = titleEl?.QuerySelector(".t1") is { } t1 && Text(t1).Length > 0
+            ? Text(t1)
+            : titleEl != null ? Text(titleEl) : "";
+        if (name.Length == 0) throw RezkaException.Parse("person name");
+
+        var origEl = doc.QuerySelector(".b-post__title .t2");
+        var origName = origEl != null && Text(origEl).Length > 0 ? Text(origEl) : null;
+
+        var cover = doc.QuerySelector(".b-post__infotable_left .b-sidecover");
+        var bigPhoto = cover?.QuerySelector("a")?.GetAttribute("href");
+        var photo = cover?.QuerySelector("img")?.GetAttribute("src");
+
+        string? career = null, birthDate = null, birthPlace = null;
+        string? deathDate = null, deathPlace = null, height = null;
+        foreach (var tr in doc.QuerySelectorAll(".b-post__infotable_right_inner tr"))
+        {
+            var tds = tr.Children.Where(c => c.TagName.Equals("TD", StringComparison.OrdinalIgnoreCase)).ToList();
+            if (tds.Count != 2) continue;
+            var label = StripNonLetters(tds[0].QuerySelector("h2") is { } h2 ? Text(h2) : Text(tds[0]));
+            var value = Text(tds[1]);
+            if (value.Length == 0) continue;
+            switch (label)
+            {
+                case "Карьера": career = value; break;
+                case "Датарождения": birthDate = value; break;
+                case "Месторождения": birthPlace = value; break;
+                case "Датасмерти": deathDate = value; break;
+                case "Местосмерти": deathPlace = value; break;
+                case "Рост": height = value; break;
+            }
+        }
+
+        var filmography = new List<PersonMovieGroup>();
+        foreach (var block in doc.QuerySelectorAll(".b-person__career"))
+        {
+            var roleId = block.QuerySelector("h2")?.GetAttribute("id") ?? "";
+            if (roleId.Length == 0) continue;
+            var movies = block.QuerySelectorAll(".b-content__inline_item")
+                .Select(ParseInlineItem)
+                .Where(m => m.Id.Length > 0)
+                .ToList();
+            if (movies.Count > 0) filmography.Add(new PersonMovieGroup(roleId, movies));
+        }
+
+        return new PersonDetailed
+        {
+            Id = pagePath,
+            Name = name,
+            OriginalName = origName,
+            Photo = photo,
+            BigPhoto = bigPhoto,
+            Career = career,
+            BirthDate = birthDate,
+            BirthPlace = birthPlace,
+            DeathDate = deathDate,
+            DeathPlace = deathPlace,
+            Height = height,
+            Filmography = filmography.Count > 0 ? filmography : null,
+        };
     }
 
     internal static IReadOnlyList<MovieSeason> ParseSeasonsFromDocument(IDocument doc)

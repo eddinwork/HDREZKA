@@ -35,6 +35,8 @@ public sealed record MovieVoiceActing(
     bool IsSelected,
     string? Url);
 
+public sealed record MovieVoiceActingRating(string Name, float Percent);
+
 public sealed record MovieEpisode(string EpisodeId, string Name, bool IsSelected, string? Url);
 
 public sealed record MovieSeason(string SeasonId, string Name, IReadOnlyList<MovieEpisode> Episodes, bool IsSelected, string? Url);
@@ -117,7 +119,10 @@ public sealed class MovieDetailed
     public bool IsComingSoon { get; init; }
     public bool IsRated { get; init; }
     public IReadOnlyList<MovieVoiceActing>? VoiceActings { get; init; }
+    public IReadOnlyList<MovieVoiceActingRating>? VoiceActingRatings { get; init; }
     public IReadOnlyList<MovieSeason>? Seasons { get; init; }
+    public IReadOnlyList<MovieSimple>? WatchAlso { get; init; }
+    public IReadOnlyList<SeriesScheduleGroup>? Schedule { get; init; }
     public string? Adb { get; init; }
     public string? TypeId { get; init; }
     public required string Favs { get; init; }
@@ -126,6 +131,32 @@ public sealed class MovieDetailed
 
 public sealed record MovieCountry(string Name, string Id);
 public sealed record MovieGenre(string Name, string Id);
+
+public sealed record PersonMovieGroup(string RoleId, IReadOnlyList<MovieSimple> Movies);
+
+public sealed record SeriesScheduleItem(
+    string Title,
+    string RussianName,
+    string? OriginalName,
+    string ReleaseDate);
+
+public sealed record SeriesScheduleGroup(string Name, IReadOnlyList<SeriesScheduleItem> Items);
+
+public sealed class PersonDetailed
+{
+    public required string Id { get; init; }
+    public required string Name { get; init; }
+    public string? OriginalName { get; init; }
+    public string? Photo { get; init; }
+    public string? BigPhoto { get; init; }
+    public string? Career { get; init; }
+    public string? BirthDate { get; init; }
+    public string? BirthPlace { get; init; }
+    public string? DeathDate { get; init; }
+    public string? DeathPlace { get; init; }
+    public string? Height { get; init; }
+    public IReadOnlyList<PersonMovieGroup>? Filmography { get; init; }
+}
 
 public enum Section { Films, Series, Cartoons, Show, Anime }
 

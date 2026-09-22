@@ -63,5 +63,57 @@ public partial class App : Application
 
         // New-episode notifications for watched series (delayed, background).
         _ = Services.TrackedSeriesService.CheckOnStartupAsync();
+
+        // If the previous session died mid-playback (marker left behind),
+        // tell the user it's most likely the video driver/overlay.
+        _ = CheckLastPlaybackCrashAsync(MainWindow);
+    }
+
+    private static async Task CheckLastPlaybackCrashAsync(MainWindow window)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            var title = Views.PlayerPage.TakePlaybackMarker();
+            if (title == null) return;
+            try { TryLog(new Exception("[Crash] showing aftermath dialog for " + title)); } catch { }
+
+            var tcs = new TaskCompletionSource();
+            var enqueued = window.DispatcherQueue.TryEnqueue(async () =>
+            {
+                try
+                {
+                    var xamlRoot = window.Content?.XamlRoot;
+                    if (xamlRoot == null) return;
+                    var dialog = new Microsoft.UI.Xaml.Controls.ContentDialog
+                    {
+                        Title = Services.Loc.Get("Crash.Title"),
+                        Content = Services.Loc.Get("Crash.Text", title),
+                        CloseButtonText = "OK",
+                        DefaultButton = Microsoft.UI.Xaml.Controls.ContentDialogButton.Close,
+                        XamlRoot = xamlRoot,
+                    };
+                    await dialog.ShowAsync();
+                }
+                catch (Exception ex)
+                {
+                    TryLog(ex);
+                }
+                finally
+                {
+                    tcs.TrySetResult();
+                }
+            });
+            if (!enqueued)
+            {
+                return;
+            }
+
+            await tcs.Task.ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            TryLog(ex);
+        }
     }
 }

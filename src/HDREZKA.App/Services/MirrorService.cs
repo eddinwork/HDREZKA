@@ -265,7 +265,7 @@ public static class MirrorService
         if (RezkaService.Instance.IsLoggedIn && xamlRoot != null && dispatcher != null)
         {
             var tcs = new TaskCompletionSource<bool>();
-            dispatcher.TryEnqueue(async () =>
+            var enqueued = dispatcher.TryEnqueue(async () =>
             {
                 try
                 {
@@ -285,6 +285,11 @@ public static class MirrorService
                     tcs.TrySetResult(false);
                 }
             });
+            if (!enqueued)
+            {
+                return null;
+            }
+
             if (!await tcs.Task.ConfigureAwait(false)) return null;
         }
 

@@ -419,6 +419,12 @@ public sealed class RezkaClient
         return Parsers.ParseDetails(html, pagePath);
     }
 
+    public async Task<PersonDetailed> GetPersonAsync(string pagePath, CancellationToken ct = default)
+    {
+        var html = await GetStringAsync(pagePath, ct).ConfigureAwait(false);
+        return Parsers.ParsePerson(html, pagePath);
+    }
+
     public async Task<IReadOnlyList<MovieSeason>> GetSeriesSeasonsAsync(string movieId, MovieVoiceActing voice, string favs, CancellationToken ct = default)
     {
         if (voice.Url == null)

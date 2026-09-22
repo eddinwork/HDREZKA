@@ -112,6 +112,28 @@
                     <StackPanel x:Name="ContinueRow" Orientation="Horizontal" Spacing="0"/>
                 </StackPanel>
 
+                <StackPanel x:Name="TrackedSection" Spacing="0" Margin="0,8,0,0" Visibility="Collapsed">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="TrackedHeader" Style="{StaticResource RowHeaderText}"/>
+                        <Button x:Name="TrackedAllButton" Grid.Column="1" Click="TrackedAll_Click"
+                                VerticalAlignment="Bottom" Margin="0,0,0,10"
+                                Background="Transparent" BorderThickness="0" Padding="8,4">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock x:Name="TrackedAllText" FontSize="13"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <FontIcon Glyph="&#xE76C;" FontSize="12"
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <StackPanel x:Name="TrackedRow" Orientation="Horizontal" Spacing="0"/>
+                </StackPanel>
+
                 <StackPanel x:Name="FilmsSection" Spacing="0" Margin="0,8,0,0">
                     <Grid>
                         <Grid.ColumnDefinitions>

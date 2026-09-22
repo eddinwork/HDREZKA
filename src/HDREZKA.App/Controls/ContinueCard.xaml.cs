@@ -24,6 +24,14 @@ public sealed partial class ContinueCard : UserControl
     public event EventHandler<ContinueItem>? DeleteRequested;
     public event EventHandler<ContinueItem>? WatchedToggled;
 
+    /// <summary>
+    /// When true (and PlayRequested has subscribers), tap raises
+    /// PlayRequested instead of navigating to details.
+    /// </summary>
+    public bool PlayDirectly { get; set; }
+
+    public event EventHandler<ContinueItem>? PlayRequested;
+
     public ContinueCard()
     {
         InitializeComponent();
@@ -102,6 +110,12 @@ public sealed partial class ContinueCard : UserControl
         // Clicks on action buttons bubble up here: ignore them,
         // otherwise toggling/deleting an entry also navigates to details.
         if (IsActionButtonSource(e.OriginalSource)) return;
+        if (PlayDirectly && PlayRequested != null)
+        {
+            PlayRequested.Invoke(this, Data);
+            return;
+        }
+
         Nav.Go<DetailsPage>(new MovieSimple(Id: Data.Id, Name: Data.Title, Poster: Data.Poster));
     }
 

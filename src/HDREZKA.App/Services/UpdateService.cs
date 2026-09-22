@@ -7,7 +7,7 @@ public sealed record UpdateInfo(string Version, string Url, string Notes);
 
 public static class UpdateService
 {
-    public const string CurrentVersion = "1.3.0";
+    public const string CurrentVersion = "1.4.0";
 
     private const string ReleasesApiUrl = "https://api.github.com/repos/eddinwork/HDREZKA/releases/latest";
     private const string ReleasesPageUrl = "https://github.com/eddinwork/HDREZKA/releases";
@@ -123,6 +123,7 @@ public static class UpdateService
             settings.LastNotifiedVersion = latest.Version;
             settings.Save();
 
+            try { App.TryLog(new Exception("[Update] notifying " + latest.Version)); } catch { }
             await ShowUpdateDialogAsync(window, latest).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -134,7 +135,7 @@ public static class UpdateService
     public static async Task ShowUpdateDialogAsync(Microsoft.UI.Xaml.Window window, UpdateInfo latest)
     {
         var tcs = new TaskCompletionSource();
-        window.DispatcherQueue.TryEnqueue(async () =>
+        var enqueued = window.DispatcherQueue.TryEnqueue(async () =>
         {
             try
             {
@@ -177,6 +178,11 @@ public static class UpdateService
                 tcs.TrySetResult();
             }
         });
+        if (!enqueued)
+        {
+            return;
+        }
+
         await tcs.Task.ConfigureAwait(false);
     }
 }

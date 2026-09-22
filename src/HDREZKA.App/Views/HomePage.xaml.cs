@@ -14,6 +14,8 @@ public sealed partial class HomePage : Page
     private const int HeroCount = 5;
     private const int HomeContinueCount = 3;
 
+    private readonly Dictionary<string, bool> _sectionHasContent = new(StringComparer.OrdinalIgnoreCase);
+
     private bool _loaded;
     private readonly List<MovieSimple> _heroItems = new();
     private int _heroIndex;
@@ -50,7 +52,9 @@ public sealed partial class HomePage : Page
 
         ApplyHeroMetrics();
         SettingsService.Instance.PosterSizeChanged += OnPosterSizeChanged;
+        TrackedSeriesService.UpdatesChanged += OnTrackedUpdatesChanged;
         RenderContinue();
+        RenderTracked();
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -58,7 +62,13 @@ public sealed partial class HomePage : Page
         base.OnNavigatedFrom(e);
         _heroTimer.Stop();
         SettingsService.Instance.PosterSizeChanged -= OnPosterSizeChanged;
+        TrackedSeriesService.UpdatesChanged -= OnTrackedUpdatesChanged;
         LocalizationService.Instance.LanguageChanged -= OnLanguageChanged;
+    }
+
+    private void OnTrackedUpdatesChanged()
+    {
+        DispatcherQueue.TryEnqueue(RenderTracked);
     }
 
     private void OnPosterSizeChanged() => DispatcherQueue.TryEnqueue(ApplyHeroMetrics);
@@ -77,6 +87,7 @@ public sealed partial class HomePage : Page
         {
             ApplyLocalization();
             RenderContinue();
+            RenderTracked();
         });
     }
 
@@ -87,6 +98,7 @@ public sealed partial class HomePage : Page
         MirrorButton.Content = Loc.Get("Settings.AutoMirror");
         HeroWatchButton.Content = Loc.Get("Common.Watch");
         ContinueHeader.Text = Loc.Get("Continue.Home");
+        TrackedHeader.Text = Loc.Get("Home.Tracked");
         FilmsHeader.Text = Loc.Get("Section.Films") + " — " + Loc.Get("Filter.Latest");
         SeriesHeader.Text = Loc.Get("Section.Series") + " — " + Loc.Get("Filter.Latest");
         CartoonsHeader.Text = Loc.Get("Section.Cartoons") + " — " + Loc.Get("Filter.Latest");
@@ -102,6 +114,7 @@ public sealed partial class HomePage : Page
         WatchingAllText.Text = showAll;
         SoonAllText.Text = showAll;
         ContinueAllText.Text = showAll;
+        TrackedAllText.Text = showAll;
     }
 
     private async void Load()
@@ -123,12 +136,13 @@ public sealed partial class HomePage : Page
             await Task.WhenAll(hot, films, series, cartoons, popular, watching, soon);
 
             BindHero(hot.Result.Take(HeroCount).ToList());
-            BindSection(FilmsSection, FilmsGrid, films.Result.Items);
-            BindSection(SeriesSection, SeriesGrid, series.Result.Items);
-            BindSection(CartoonsSection, CartoonsGrid, cartoons.Result.Items);
-            BindSection(PopularSection, PopularGrid, popular.Result.Items);
-            BindSection(WatchingSection, WatchingGrid, watching.Result.Items);
-            BindSection(SoonSection, SoonGrid, soon.Result.Items);
+            BindSection("Films", FilmsSection, FilmsGrid, films.Result.Items);
+            BindSection("Series", SeriesSection, SeriesGrid, series.Result.Items);
+            BindSection("Cartoons", CartoonsSection, CartoonsGrid, cartoons.Result.Items);
+            BindSection("Popular", PopularSection, PopularGrid, popular.Result.Items);
+            BindSection("Watching", WatchingSection, WatchingGrid, watching.Result.Items);
+            BindSection("Soon", SoonSection, SoonGrid, soon.Result.Items);
+            ApplySectionLayout();
 
             LoadingPanel.Visibility = Visibility.Collapsed;
         }
@@ -145,6 +159,7 @@ public sealed partial class HomePage : Page
         _heroItems.Clear();
         _heroItems.AddRange(movies.Where(m => m != null));
         _heroIndex = 0;
+        _sectionHasContent["Hero"] = _heroItems.Count > 0;
 
         HeroDots.Children.Clear();
         for (var i = 0; i < _heroItems.Count; i++)
@@ -271,11 +286,49 @@ public sealed partial class HomePage : Page
         _heroTimer.Start();
     }
 
-    private static void BindSection(StackPanel section, GridView grid, IReadOnlyList<MovieSimple> items)
+    private void BindSection(string id, StackPanel section, GridView grid, IReadOnlyList<MovieSimple> items)
     {
         var preview = items.Take(SectionPreviewCount).ToList();
         grid.ItemsSource = preview;
-        section.Visibility = preview.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        var show = preview.Count > 0;
+        _sectionHasContent[id] = show;
+        section.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Orders + hides home blocks per Settings → Home screen.
+    /// Content presence comes from _sectionHasContent (bind methods).
+    /// </summary>
+    private void ApplySectionLayout()
+    {
+        var map = new Dictionary<string, UIElement>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Hero"] = HeroCard,
+            ["Continue"] = ContinueSection,
+            ["Tracked"] = TrackedSection,
+            ["Films"] = FilmsSection,
+            ["Series"] = SeriesSection,
+            ["Cartoons"] = CartoonsSection,
+            ["Popular"] = PopularSection,
+            ["Watching"] = WatchingSection,
+            ["Soon"] = SoonSection,
+        };
+
+        var pos = 0;
+        foreach (var s in SettingsService.Instance.HomeSections)
+        {
+            if (!map.TryGetValue(s.Id, out var el)) continue;
+            el.Visibility = s.Visible && _sectionHasContent.GetValueOrDefault(s.Id)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            var idx = ContentPanel.Children.IndexOf(el);
+            if (idx >= 0 && idx != pos)
+            {
+                ContentPanel.Children.Move((uint)idx, (uint)pos);
+            }
+
+            pos++;
+        }
     }
 
     /// <summary>
@@ -299,13 +352,16 @@ public sealed partial class HomePage : Page
                 Data = item,
                 Margin = new Thickness(0, 0, 18, 26),
                 IsHitTestVisible = true,
+                PlayDirectly = SettingsService.Instance.PlayFromHomeDirectly,
             };
             card.DeleteRequested += OnHomeContinueDeleteRequested;
             card.WatchedToggled += OnHomeContinueWatchedToggled;
+            card.PlayRequested += OnHomeContinuePlayRequested;
             ContinueRow.Children.Add(card);
         }
 
-        ContinueSection.Visibility = items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        _sectionHasContent["Continue"] = items.Count > 0;
+        ApplySectionLayout();
     }
 
     private void OnHomeContinueDeleteRequested(object? sender, ContinueItem item)
@@ -323,9 +379,128 @@ public sealed partial class HomePage : Page
         }
     }
 
+    private void GoToDetails(ContinueItem item)
+    {
+        Nav.Go<DetailsPage>(new MovieSimple(Id: item.Id, Name: item.Title, Poster: item.Poster));
+    }
+
+    /// <summary>
+    /// Direct resume from Home: resolves the saved voice/season/episode
+    /// and opens the player without the details page. Falls back to
+    /// details on any failure.
+    /// </summary>
+    private async void OnHomeContinuePlayRequested(object? sender, ContinueItem item)
+    {
+        if (sender is ContinueCard card) card.IsEnabled = false;
+        try
+        {
+            if (item.MovieKey == null || item.TranslatorKey == null)
+            {
+                GoToDetails(item);
+                return;
+            }
+
+            var client = RezkaService.Instance.Client;
+            var details = await client.GetDetailsAsync(item.Id);
+            var voice = details.VoiceActings?.FirstOrDefault(v => v.TranslatorId == item.TranslatorKey)
+                ?? details.VoiceActings?.FirstOrDefault(v => v.IsSelected)
+                ?? details.VoiceActings?.FirstOrDefault();
+            if (voice == null || !details.IsAvailable || details.IsComingSoon)
+            {
+                GoToDetails(item);
+                return;
+            }
+
+            IReadOnlyList<MovieSeason>? seasons = details.Seasons;
+            if (voice.Url == null && seasons == null)
+            {
+                var numeric = ContinueWatchingPage.ExtractNumericId(details.Id);
+                if (numeric == null)
+                {
+                    GoToDetails(item);
+                    return;
+                }
+
+                seasons = await client.GetSeriesSeasonsAsync(numeric, voice, details.Favs);
+            }
+
+            var season = seasons?.FirstOrDefault(s => s.SeasonId == item.SeasonKey)
+                ?? seasons?.FirstOrDefault(s => s.IsSelected)
+                ?? seasons?.FirstOrDefault();
+            var episode = season?.Episodes.FirstOrDefault(e => e.EpisodeId == item.EpisodeKey)
+                ?? season?.Episodes.FirstOrDefault(e => e.IsSelected)
+                ?? season?.Episodes.FirstOrDefault();
+
+            var playerWindow = new PlayerWindow();
+            playerWindow.ShowPlayer(new PlayerLaunch(details, voice, seasons, season, episode));
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+            GoToDetails(item);
+        }
+        finally
+        {
+            if (sender is ContinueCard card2) card2.IsEnabled = true;
+        }
+    }
+
     private void ContinueAll_Click(object sender, RoutedEventArgs e)
     {
         Nav.Go<ContinueWatchingPage>();
+    }
+
+    /// <summary>
+    /// Tracked series with released episodes (from Updates store).
+    /// Delete consumes the entry; eye toggle is a no-op here (no watch key).
+    /// </summary>
+    private void RenderTracked()
+    {
+        TrackedRow.Children.Clear();
+
+        var items = TrackedSeriesService.GetUpdates()
+            .Take(HomeContinueCount)
+            .Select(u => new ContinueItem(
+                Id: u.PagePath,
+                Title: u.Title,
+                Poster: u.Poster,
+                Subtitle: $"{u.Text} · {u.Date:dd.MM.yyyy}",
+                PositionSeconds: 0,
+                DurationSeconds: 0,
+                UpdatedAt: u.Date))
+            .ToList();
+
+        foreach (var item in items)
+        {
+            var card = new ContinueCard
+            {
+                Data = item,
+                Margin = new Thickness(0, 0, 18, 26),
+                IsHitTestVisible = true,
+            };
+            card.DeleteRequested += OnTrackedDeleteRequested;
+            TrackedRow.Children.Add(card);
+        }
+
+        _sectionHasContent["Tracked"] = items.Count > 0;
+        ApplySectionLayout();
+    }
+
+    private void OnTrackedDeleteRequested(object? sender, ContinueItem item)
+    {
+        var stored = TrackedSeriesService.GetUpdates()
+            .FirstOrDefault(u => u.PagePath == item.Id && u.Title == item.Title && u.Date == item.UpdatedAt);
+        if (stored != null)
+        {
+            TrackedSeriesService.RemoveUpdate(stored);
+        }
+
+        RenderTracked();
+    }
+
+    private void TrackedAll_Click(object sender, RoutedEventArgs e)
+    {
+        Nav.Go<UpdatesPage>();
     }
 
     private void HeroWatchButton_Click(object sender, RoutedEventArgs e)

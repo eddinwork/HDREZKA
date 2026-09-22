@@ -31,7 +31,11 @@ public sealed partial class DetailsPage : Page
     public DetailsPage()
     {
         InitializeComponent();
-        Loaded += (_, _) => UpdateAdaptiveLayout();
+        Loaded += (_, _) =>
+        {
+            try { App.TryLog(new Exception("[Details] Loaded")); } catch { }
+            UpdateAdaptiveLayout();
+        };
         SizeChanged += (_, _) => UpdateAdaptiveLayout();
     }
 
@@ -100,6 +104,8 @@ public sealed partial class DetailsPage : Page
         BookmarkText.Text = Loc.Get("Common.AddToBookmarks");
         WatchedText.Text = Loc.Get("Continue.ToggleWatched");
         TrackText.Text = Loc.Get("Details.Track");
+        WatchAlsoHeader.Text = Loc.Get("Details.WatchAlso");
+        if (_details != null) RenderSchedule(_details);
         VoicesHeader.Text = Loc.Get("Common.VoiceActing");
         SeasonsHeader.Text = Loc.Get("Common.Season");
         RetryButton.Content = Loc.Get("Common.Retry");
@@ -204,6 +210,180 @@ public sealed partial class DetailsPage : Page
 
         UpdateWatchedButton();
         UpdateTrackButton();
+        RenderWatchAlso(details);
+        UpdateVoicesRatingButton(details);
+        RenderSchedule(details);
+        try { App.TryLog(new Exception("[Details] Rendered " + details.Id)); } catch { }
+    }
+
+    private void RenderWatchAlso(MovieDetailed details)
+    {
+        // BISECT 22.09: disabled while hunting the DetailsPage native crash.
+        WatchAlsoList.Children.Clear();
+        WatchAlsoPanel.Visibility = Visibility.Collapsed;
+    }
+
+    private void UpdateVoicesRatingButton(MovieDetailed details)
+    {
+        VoicesRatingButton.Visibility = details.VoiceActingRatings is { Count: > 0 }
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        ToolTipService.SetToolTip(VoicesRatingButton, Loc.Get("Details.Ratings"));
+    }
+
+    private void RenderSchedule(MovieDetailed details)
+    {
+        ScheduleList.Children.Clear();
+        var groups = details.Schedule;
+        if (groups == null || groups.Count == 0 || groups.All(g => g.Items.Count == 0))
+        {
+            SchedulePanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        SchedulePanel.Visibility = Visibility.Visible;
+        ScheduleHeader.Text = Loc.Get("Details.Schedule");
+
+        var next = Parsers.FindNextRelease(groups, DateTime.Today);
+        if (next != null)
+        {
+            var days = (next.Value.Date - DateTime.Today).Days;
+            ScheduleCountdownText.Text = Loc.Get("Details.NextRelease", next.Value.Date.ToString("d MMMM yyyy"))
+                + " (" + Loc.Get("Details.DaysLeft", days) + ")";
+            ScheduleCountdownText.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            ScheduleCountdownText.Visibility = Visibility.Collapsed;
+        }
+
+        var first = groups.First(g => g.Items.Count > 0);
+        ScheduleGroupText.Text = first.Name;
+        foreach (var item in first.Items.Take(5))
+        {
+            ScheduleList.Children.Add(BuildScheduleRow(item));
+        }
+
+        var total = groups.Sum(g => g.Items.Count);
+        if (total > 5)
+        {
+            ScheduleMoreButton.Content = Loc.Get("Common.ShowAll") + $" ({total})";
+            ScheduleMoreButton.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            ScheduleMoreButton.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private static Grid BuildScheduleRow(SeriesScheduleItem item)
+    {
+        var grid = new Grid { ColumnSpacing = 12, Padding = new Thickness(0, 6, 0, 6) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var left = new StackPanel { Spacing = 2 };
+        left.Children.Add(new TextBlock { Text = item.RussianName.Length > 0 ? item.RussianName : item.Title, TextWrapping = TextWrapping.Wrap });
+        if (!string.IsNullOrEmpty(item.OriginalName))
+        {
+            left.Children.Add(new TextBlock
+            {
+                Text = item.OriginalName,
+                FontSize = 12,
+                Foreground = Application.Current.Resources["TextFillColorSecondaryBrush"] as Microsoft.UI.Xaml.Media.Brush,
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+
+        grid.Children.Add(left);
+
+        var right = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Right };
+        right.Children.Add(new TextBlock
+        {
+            Text = item.ReleaseDate,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Foreground = Application.Current.Resources["TextFillColorSecondaryBrush"] as Microsoft.UI.Xaml.Media.Brush,
+        });
+        var title = new TextBlock
+        {
+            Text = item.Title,
+            FontSize = 12,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Foreground = Application.Current.Resources["TextFillColorSecondaryBrush"] as Microsoft.UI.Xaml.Media.Brush,
+        };
+        right.Children.Add(title);
+        Grid.SetColumn(right, 1);
+        grid.Children.Add(right);
+        return grid;
+    }
+
+    private async void ScheduleMoreButton_Click(object sender, RoutedEventArgs e)
+    {
+        var groups = _details?.Schedule;
+        if (groups == null || groups.Count == 0) return;
+
+        var list = new StackPanel { Spacing = 12, MinWidth = 320 };
+        foreach (var group in groups)
+        {
+            if (group.Items.Count == 0) continue;
+            list.Children.Add(new TextBlock { Text = group.Name, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+            foreach (var item in group.Items)
+            {
+                list.Children.Add(BuildScheduleRow(item));
+            }
+        }
+
+        var scroll = new ScrollViewer { Content = list, MaxHeight = 420 };
+        var dialog = new ContentDialog
+        {
+            Title = Loc.Get("Details.Schedule"),
+            Content = scroll,
+            CloseButtonText = "OK",
+            XamlRoot = Content.XamlRoot,
+        };
+        await dialog.ShowAsync();
+    }
+
+    private async void VoicesRatingButton_Click(object sender, RoutedEventArgs e)
+    {
+        var ratings = _details?.VoiceActingRatings;
+        if (ratings == null || ratings.Count == 0) return;
+
+        var list = new StackPanel { Spacing = 10, MinWidth = 320 };
+        foreach (var r in ratings.OrderByDescending(x => x.Percent))
+        {
+            var row = new StackPanel { Spacing = 4 };
+            var header = new Grid();
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var name = new TextBlock { Text = r.Name, TextWrapping = TextWrapping.Wrap };
+            var percent = new TextBlock
+            {
+                Text = r.Percent.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "%",
+                Foreground = Application.Current.Resources["TextFillColorSecondaryBrush"] as Microsoft.UI.Xaml.Media.Brush,
+            };
+            Grid.SetColumn(percent, 1);
+            header.Children.Add(name);
+            header.Children.Add(percent);
+            row.Children.Add(header);
+            row.Children.Add(new ProgressBar
+            {
+                Minimum = 0,
+                Maximum = 100,
+                Value = Math.Clamp(r.Percent, 0, 100),
+            });
+            list.Children.Add(row);
+        }
+
+        var scroll = new ScrollViewer { Content = list, MaxHeight = 400 };
+        var dialog = new ContentDialog
+        {
+            Title = Loc.Get("Details.Ratings"),
+            Content = scroll,
+            CloseButtonText = "OK",
+            XamlRoot = Content.XamlRoot,
+        };
+        await dialog.ShowAsync();
     }
 
     private int MetaLabelWidth => _isNarrow ? 110 : 160;

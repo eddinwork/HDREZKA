@@ -59,6 +59,7 @@ public sealed partial class SettingsPage : Page
         PosterSizeBox.SelectedIndex = posterIndex >= 0 ? posterIndex : 1;
 
         HeadersToggle.IsOn = settings.UseAndroidHeaders;
+        DirectPlayCheck.IsChecked = settings.PlayFromHomeDirectly;
         SeriesToggle.IsOn = settings.SeriesUpdatesEnabled;
         VersionText.Text = $"HDREZKA for Windows · {UpdateService.CurrentVersion} (20.09.2026)";
 
@@ -101,12 +102,19 @@ public sealed partial class SettingsPage : Page
     private void ApplyLocalization()
     {
         TitleText.Text = Loc.Get("Settings.Title");
+        ConnectionHeader.Text = Loc.Get("Settings.GroupConnection");
+        InterfaceHeader.Text = Loc.Get("Settings.GroupInterface");
+        PlaybackHeader.Text = Loc.Get("Settings.GroupPlayback");
         MirrorHeader.Text = Loc.Get("Settings.Mirror");
         MirrorHint.Text = Loc.Get("Settings.MirrorHint");
         LanguageHeader.Text = Loc.Get("Settings.Language");
         ThemeHeader.Text = Loc.Get("Settings.Theme");
         QualityHeader.Text = Loc.Get("Settings.Quality");
+        DirectPlayCheck.Content = Loc.Get("Settings.PlayFromHome");
         PosterSizeHeader.Text = Loc.Get("Settings.PosterSize");
+        HomeHeader.Text = Loc.Get("Settings.HomeSections");
+        HomeHint.Text = Loc.Get("Settings.HomeSectionsHint");
+        BuildHomeSectionsList();
         HeadersHeader.Text = Loc.Get("Settings.Headers");
         HeadersHint.Text = Loc.Get("Settings.HeadersHint");
         AutoMirrorButton.Content = Loc.Get("Settings.AutoMirror");
@@ -191,12 +199,99 @@ public sealed partial class SettingsPage : Page
         }
     }
 
+    private static string HomeSectionName(string id) => id switch
+    {
+        "Hero" => Loc.Get("Filter.Hot"),
+        "Continue" => Loc.Get("Continue.Home"),
+        "Tracked" => Loc.Get("Home.Tracked"),
+        "Films" => Loc.Get("Section.Films"),
+        "Series" => Loc.Get("Section.Series"),
+        "Cartoons" => Loc.Get("Section.Cartoons"),
+        "Popular" => Loc.Get("Filter.Popular"),
+        "Watching" => Loc.Get("Filter.WatchingNow"),
+        "Soon" => Loc.Get("Filter.Soon"),
+        _ => id,
+    };
+
+    private void BuildHomeSectionsList()
+    {
+        HomeSectionsList.Children.Clear();
+        var sections = SettingsService.Instance.HomeSections;
+        for (var i = 0; i < sections.Count; i++)
+        {
+            var index = i;
+            var row = new Grid { ColumnSpacing = 4 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var check = new CheckBox
+            {
+                Content = HomeSectionName(sections[index].Id),
+                IsChecked = sections[index].Visible,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            check.Checked += (_, _) => SetHomeSectionVisible(index, true);
+            check.Unchecked += (_, _) => SetHomeSectionVisible(index, false);
+            row.Children.Add(check);
+
+            var up = new Button
+            {
+                Content = new FontIcon { Glyph = "\uE96D", FontSize = 12 },
+                MinWidth = 0,
+                Padding = new Thickness(10, 6, 10, 6),
+                IsEnabled = index > 0,
+            };
+            up.Click += (_, _) => MoveHomeSection(index, -1);
+            Grid.SetColumn(up, 1);
+            row.Children.Add(up);
+
+            var down = new Button
+            {
+                Content = new FontIcon { Glyph = "\uE96E", FontSize = 12 },
+                MinWidth = 0,
+                Padding = new Thickness(10, 6, 10, 6),
+                IsEnabled = index < sections.Count - 1,
+            };
+            down.Click += (_, _) => MoveHomeSection(index, 1);
+            Grid.SetColumn(down, 2);
+            row.Children.Add(down);
+
+            HomeSectionsList.Children.Add(row);
+        }
+    }
+
+    private static void SetHomeSectionVisible(int index, bool visible)
+    {
+        var list = SettingsService.Instance.HomeSections;
+        if (index < 0 || index >= list.Count) return;
+        list[index] = list[index] with { Visible = visible };
+        SettingsService.Instance.Save();
+    }
+
+    private void MoveHomeSection(int index, int delta)
+    {
+        var list = SettingsService.Instance.HomeSections;
+        var j = index + delta;
+        if (index < 0 || index >= list.Count || j < 0 || j >= list.Count) return;
+        (list[index], list[j]) = (list[j], list[index]);
+        SettingsService.Instance.Save();
+        BuildHomeSectionsList();
+    }
+
     private void HeadersToggle_Toggled(object sender, RoutedEventArgs e)
     {
         if (!_initialized) return;
         SettingsService.Instance.UseAndroidHeaders = HeadersToggle.IsOn;
         SettingsService.Instance.Save();
         RezkaService.Instance.ApplySettings();
+    }
+
+    private void DirectPlayCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_initialized) return;
+        SettingsService.Instance.PlayFromHomeDirectly = DirectPlayCheck.IsChecked == true;
+        SettingsService.Instance.Save();
     }
 
     private void SeriesToggle_Toggled(object sender, RoutedEventArgs e)

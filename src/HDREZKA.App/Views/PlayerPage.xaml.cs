@@ -22,6 +22,7 @@ public sealed partial class PlayerPage : Page
     private MediaPlayer? _player;
     private MediaPlaybackItem? _playbackItem;
     private MediaSource? _currentSource;
+    private volatile bool _tearingDown;
     private readonly List<MovieSubtitle> _attachedSubtitles = new();
     private bool _mediaOpened;
     private int _loadGen;
@@ -122,7 +123,9 @@ public sealed partial class PlayerPage : Page
 
     private void TeardownPlayback()
     {
+        _tearingDown = true;
         UpdateDisplayRequest(false);
+        ClearPlaybackMarker();
         SavePosition();
         _saveTimer.Stop();
         _hideTimer.Stop();
@@ -171,6 +174,7 @@ public sealed partial class PlayerPage : Page
     {
         if (_player != null) return;
 
+        _tearingDown = false;
         _player = new MediaPlayer();
         PlayerElement.SetMediaPlayer(_player);
         var volume = Math.Clamp(SettingsService.Instance.Volume, 0, 100);
@@ -388,6 +392,9 @@ public sealed partial class PlayerPage : Page
             var player = _player;
             if (player == null) return;
             player.Source = _playbackItem;
+            // Setting Source resets PlaybackRate to 1x: re-apply saved speed,
+            // otherwise UI shows 2x while video plays at 1x.
+            ApplySpeed();
             App.TryLog(new Exception($"[Player] Source set, pending seek={_pendingSeekMs}"));
             _ = WatchOpenTimeoutAsync(gen);
         }
@@ -643,7 +650,10 @@ public sealed partial class PlayerPage : Page
         _mediaOpened = true;
         DispatcherQueue.TryEnqueue(() =>
         {
-            var duration = sender.PlaybackSession.NaturalDuration;
+            try
+            {
+                if (_tearingDown) return;
+                var duration = sender.PlaybackSession.NaturalDuration;
             if (duration > TimeSpan.Zero)
             {
                 TotalTimeText.Text = FormatTime((long)duration.TotalMilliseconds);
@@ -668,6 +678,10 @@ public sealed partial class PlayerPage : Page
                 BuildSubtitles(_currentSource, _video);
             }
 
+            // Crash watchdog: rewritten on every clean stop, so a leftover
+            // marker at next launch means playback died with the process.
+            WritePlaybackMarker(_launch?.Details.Name ?? "");
+
             try
             {
                 sender.Play();
@@ -676,7 +690,54 @@ public sealed partial class PlayerPage : Page
             {
                 App.TryLog(ex);
             }
+            }
+            catch (Exception ex)
+            {
+                App.TryLog(ex);
+            }
         });
+    }
+
+    private static string PlaybackMarkerPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "HDREZKA", "playback_active.txt");
+
+    private static void WritePlaybackMarker(string title)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(PlaybackMarkerPath)!);
+            File.WriteAllText(PlaybackMarkerPath, $"{title}\n{DateTime.UtcNow:o}");
+        }
+        catch
+        {
+        }
+    }
+
+    private static void ClearPlaybackMarker()
+    {
+        try
+        {
+            if (File.Exists(PlaybackMarkerPath)) File.Delete(PlaybackMarkerPath);
+        }
+        catch
+        {
+        }
+    }
+
+    internal static string? TakePlaybackMarker()
+    {
+        try
+        {
+            if (!File.Exists(PlaybackMarkerPath)) return null;
+            var firstLine = File.ReadAllLines(PlaybackMarkerPath).FirstOrDefault()?.Trim();
+            File.Delete(PlaybackMarkerPath);
+            return string.IsNullOrEmpty(firstLine) ? "?" : firstLine;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private async Task WatchOpenTimeoutAsync(int gen)
@@ -696,31 +757,66 @@ public sealed partial class PlayerPage : Page
 
     private void OnPositionChanged(MediaPlaybackSession sender, object args)
     {
-        if (_switching) return;
+        if (_tearingDown || _switching) return;
 
         var now = DateTime.UtcNow;
         if ((now - _lastTimeChanged).TotalMilliseconds < 250) return;
         _lastTimeChanged = now;
 
-        var posMs = (long)sender.Position.TotalMilliseconds;
-        var totalMs = sender.NaturalDuration.TotalMilliseconds;
+        long posMs, totalMs;
+        try
+        {
+            posMs = (long)sender.Position.TotalMilliseconds;
+            totalMs = (long)sender.NaturalDuration.TotalMilliseconds;
+        }
+        catch
+        {
+            return; // session dying (dispose race) — ignore
+        }
+
         DispatcherQueue.TryEnqueue(() =>
         {
-            TotalTimeText.Text = FormatTime((long)totalMs);
-            CurrentTimeText.Text = FormatTime(posMs);
-            if (!_seeking && totalMs > 0)
+            try
             {
-                SeekSlider.Value = posMs * 1000.0 / totalMs;
+                if (_tearingDown) return;
+                TotalTimeText.Text = FormatTime(totalMs);
+                CurrentTimeText.Text = FormatTime(posMs);
+                if (!_seeking && totalMs > 0)
+                {
+                    SeekSlider.Value = posMs * 1000.0 / totalMs;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.TryLog(ex);
             }
         });
     }
 
     private void OnNaturalDurationChanged(MediaPlaybackSession sender, object args)
     {
-        var totalMs = (long)sender.NaturalDuration.TotalMilliseconds;
+        if (_tearingDown) return;
+        long totalMs;
+        try
+        {
+            totalMs = (long)sender.NaturalDuration.TotalMilliseconds;
+        }
+        catch
+        {
+            return;
+        }
+
         DispatcherQueue.TryEnqueue(() =>
         {
-            if (totalMs > 0) TotalTimeText.Text = FormatTime(totalMs);
+            try
+            {
+                if (_tearingDown) return;
+                if (totalMs > 0) TotalTimeText.Text = FormatTime(totalMs);
+            }
+            catch (Exception ex)
+            {
+                App.TryLog(ex);
+            }
         });
     }
 
@@ -741,8 +837,11 @@ public sealed partial class PlayerPage : Page
 
         DispatcherQueue.TryEnqueue(() =>
         {
-            switch (state)
+            try
             {
+                if (_tearingDown) return;
+                switch (state)
+                {
                 case MediaPlaybackState.Playing:
                     PlayPauseIcon.Glyph = "\uE769";
                     BigPlayIcon.Glyph = "\uE769";
@@ -777,6 +876,11 @@ public sealed partial class PlayerPage : Page
             }
 
             App.TryLog(new Exception($"[Player] State: {state} Time: {posMs}"));
+            }
+            catch (Exception ex)
+            {
+                App.TryLog(ex);
+            }
         });
     }
 
