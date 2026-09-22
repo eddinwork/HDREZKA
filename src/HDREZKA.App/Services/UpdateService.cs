@@ -7,7 +7,7 @@ public sealed record UpdateInfo(string Version, string Url, string Notes);
 
 public static class UpdateService
 {
-    public const string CurrentVersion = "1.4.0";
+    public const string CurrentVersion = "1.4.1";
 
     private const string ReleasesApiUrl = "https://api.github.com/repos/eddinwork/HDREZKA/releases/latest";
     private const string ReleasesPageUrl = "https://github.com/eddinwork/HDREZKA/releases";

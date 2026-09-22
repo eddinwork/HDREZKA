@@ -268,6 +268,39 @@ public class ParserTests
     }
 
     [Fact]
+    public void ParseDetails_SingleVoiceFallback_TranslatorParsed()
+    {
+        // No #translators-list: translator id must come from initCDN*Events
+        // without leaking "(" + id (old Replace-based bug gave "(84979").
+        string WrapVoiceInit(string init) => $$"""
+            <html><body>
+            <div id="wrapper">
+            <div class="b-content__main">
+              <div class="b-post__title">Фильм</div>
+              <div class="b-player__container_cdn"></div>
+              <input type="hidden" id="ctrl_favs" value="f1">
+              <div id="comments-list-button">Комментарии <em>0</em></div>
+              <table class="b-post__info"><tr><td class="l">В переводе:</td><td>Дубляж</td></tr></table>
+              <script>{{init}}</script>
+            </div>
+            </div></body></html>
+            """;
+
+        var noTranslator = Parsers.ParseDetails(
+            WrapVoiceInit("initCDNMoviesEvents(84979);"), "films/84979-test.html");
+        Assert.NotNull(noTranslator.VoiceActings);
+        Assert.Single(noTranslator.VoiceActings!);
+        Assert.Equal("", noTranslator.VoiceActings![0].TranslatorId);
+        Assert.DoesNotContain("(", noTranslator.VoiceActings![0].TranslatorId);
+
+        var withTranslator = Parsers.ParseDetails(
+            WrapVoiceInit("initCDNSeriesEvents(123, 456, 789);"), "series/123-test.html");
+        Assert.NotNull(withTranslator.VoiceActings);
+        Assert.Single(withTranslator.VoiceActings!);
+        Assert.Equal("456", withTranslator.VoiceActings![0].TranslatorId);
+    }
+
+    [Fact]
     public void ParseSeasonsResponse_Json_Works()
     {
         var seasonsHtml = "<ul id='simple-seasons-tabs'><li class='b-simple_season__item active' data-tab_id='1'>1 сезон</li><li class='b-simple_season__item' data-tab_id='2'>2 сезон</li></ul>";

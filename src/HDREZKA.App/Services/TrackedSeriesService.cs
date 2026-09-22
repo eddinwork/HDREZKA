@@ -1,6 +1,6 @@
 using System.Text.Json;
 using HDREZKA.Core.Api;
-using Microsoft.Windows.AppNotifications.Builder;
+using Microsoft.Windows.AppNotifications;
 
 namespace HDREZKA.App.Services;
 
@@ -318,11 +318,18 @@ public static class TrackedSeriesService
         {
             try
             {
-                var notification = new AppNotificationBuilder()
-                    .AddText(Loc.Get("Notify.NewEpisodes"))
-                    .AddText($"{u.Title}: {u.Text}")
-                    .BuildNotification();
-                Microsoft.Windows.AppNotifications.AppNotificationManager.Default.Show(notification);
+                // Raw XML: body click uses protocol activation (hdrezka://),
+                // which works for unpackaged apps without a COM activator.
+                var launch = System.Security.SecurityElement.Escape(
+                    ProtocolService.DetailsUri(u.PagePath).ToString());
+                var title = System.Security.SecurityElement.Escape(Loc.Get("Notify.NewEpisodes"));
+                var body = System.Security.SecurityElement.Escape($"{u.Title}: {u.Text}");
+                var xml = $"<toast activationType=\"protocol\" launch=\"{launch}\">" +
+                          "<visual><binding template=\"ToastGeneric\">" +
+                          $"<text>{title}</text><text>{body}</text>" +
+                          "</binding></visual></toast>";
+                Microsoft.Windows.AppNotifications.AppNotificationManager.Default.Show(
+                    new AppNotification(xml));
             }
             catch (Exception ex)
             {

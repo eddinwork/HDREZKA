@@ -415,7 +415,9 @@ public static class Parsers
             return result;
         }
 
-        // fallback: initCDNMoviesEvents(12345, ...) / initCDNSeriesEvents(...)
+        // fallback: initCDNMoviesEvents(12345, 67, ...) / initCDNSeriesEvents(...)
+        // NOTE: string Replace() used to leak "(" + id into translator_id
+        // when the call had no second argument — parse numbers with regex.
         var offsetKey = "initCDNMoviesEvents";
         var idx = html.IndexOf(offsetKey, StringComparison.Ordinal);
         if (idx < 0)
@@ -429,9 +431,14 @@ public static class Parsers
             return result;
         }
 
-        var afterKey = html[(idx + offsetKey.Length)..].Replace($"{offsetKey}({movieId}, ", "");
-        var comma = afterKey.IndexOf(',');
-        var translatorId = comma >= 0 ? afterKey[..comma] : afterKey;
+        var translatorId = "";
+        var m = System.Text.RegularExpressions.Regex.Match(
+            html[idx..],
+            @$"{System.Text.RegularExpressions.Regex.Escape(offsetKey)}\(\s*(\d+)\s*,?\s*(\d*)");
+        if (m.Success)
+        {
+            translatorId = m.Groups[2].Value;
+        }
 
         var voiceName = "";
         var infoTable = doc.QuerySelector(".b-post__info");

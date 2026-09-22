@@ -327,7 +327,7 @@ public sealed partial class PlayerPage : Page
 
         _switching = true;
         _stallTimes.Clear();
-        _hasPlayedOnce = false;
+        _bufferStart = null;
         ShowLoading(Loc.Get("Common.Loading"));
         BigPlayButton.Visibility = Visibility.Collapsed;
 
@@ -821,7 +821,9 @@ public sealed partial class PlayerPage : Page
     }
 
     private readonly List<DateTime> _stallTimes = new();
-    private bool _hasPlayedOnce;
+
+    /// <summary>When the current buffering episode started (null = not buffering).</summary>
+    private DateTime? _bufferStart;
 
     private void OnPlaybackStateChanged(MediaPlaybackSession sender, object args)
     {
@@ -847,9 +849,20 @@ public sealed partial class PlayerPage : Page
                     BigPlayIcon.Glyph = "\uE769";
                     BigPlayButton.Visibility = Visibility.Collapsed;
                     LoadingPanel.Visibility = Visibility.Collapsed;
-                    _hasPlayedOnce = true;
                     _hideTimer.Start();
                     UpdateDisplayRequest(true);
+                    if (_bufferStart != null)
+                    {
+                        // Buffering episode over: only a long stall (>4s)
+                        // counts. Short rebuffers from seeks/pauses are normal.
+                        var bufferingFor = DateTime.UtcNow - _bufferStart.Value;
+                        _bufferStart = null;
+                        if (bufferingFor.TotalSeconds >= 4 && !_switching)
+                        {
+                            MaybeDropQualityOnStall();
+                        }
+                    }
+
                     break;
                 case MediaPlaybackState.Paused:
                     PlayPauseIcon.Glyph = "\uE768";
@@ -857,13 +870,14 @@ public sealed partial class PlayerPage : Page
                     BigPlayButton.Opacity = 1;
                     BigPlayButton.Visibility = Visibility.Visible;
                     UpdateDisplayRequest(false);
+                    _bufferStart = null;
                     ShowControls();
                     break;
                 case MediaPlaybackState.Buffering:
                     BufferingRing.IsActive = true;
                     BufferingStatusRow.Visibility = Visibility.Visible;
                     ShowControls();
-                    if (_hasPlayedOnce && !_switching) MaybeDropQualityOnStall();
+                    _bufferStart ??= DateTime.UtcNow;
                     break;
                 case MediaPlaybackState.Opening:
                     break;
@@ -907,6 +921,7 @@ public sealed partial class PlayerPage : Page
     private void OnMediaEnded(MediaPlayer sender, object args)
     {
         UpdateDisplayRequest(false);
+        _bufferStart = null;
         DispatcherQueue.TryEnqueue(async () =>
         {
             _endReached = true;
@@ -923,6 +938,7 @@ public sealed partial class PlayerPage : Page
     private void OnMediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs e)
     {
         UpdateDisplayRequest(false);
+        _bufferStart = null;
         _pendingSeekMs = 0;
         App.TryLog(new Exception($"[Player] MediaFailed: {e.Error} {e.ErrorMessage} code={e.ExtendedErrorCode}"));
         DispatcherQueue.TryEnqueue(() => ShowStatus(Loc.Get("Player.StreamFailed"), showMirrorButton: true));
