@@ -125,6 +125,7 @@ public sealed partial class PlayerPage : Page
     {
         _tearingDown = true;
         UpdateDisplayRequest(false);
+        ShowSystemCursor();
         ClearPlaybackMarker();
         SavePosition();
         _saveTimer.Stop();
@@ -1251,6 +1252,7 @@ public sealed partial class PlayerPage : Page
         BottomBar.IsHitTestVisible = true;
         FadeElement(TopBar, show: true);
         FadeElement(BottomBar, show: true);
+        ShowSystemCursor();
         if (!IsPlaying()) return;
         _hideTimer.Start();
     }
@@ -1264,6 +1266,21 @@ public sealed partial class PlayerPage : Page
         // Invisible bars must not swallow taps: TapCatcher below handles them.
         TopBar.IsHitTestVisible = false;
         BottomBar.IsHitTestVisible = false;
+        if (_isFullscreen) HideSystemCursor();
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int ShowCursor(bool bShow);
+
+    private static void HideSystemCursor()
+    {
+        // ShowCursor is counter-based: force below zero (capped).
+        try { for (var i = 0; i < 16 && ShowCursor(false) >= 0; i++) { } } catch { }
+    }
+
+    private static void ShowSystemCursor()
+    {
+        try { for (var i = 0; i < 16 && ShowCursor(true) < 0; i++) { } } catch { }
     }
 
     private void ToggleFullscreen()
