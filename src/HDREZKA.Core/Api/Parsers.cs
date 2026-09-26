@@ -756,13 +756,41 @@ public static class Parsers
         }
         catch (JsonException)
         {
-            // fallback: script response like ... {"id": ...); });
-            var start = body.IndexOf("{\"id\":", StringComparison.Ordinal);
-            var end = body.LastIndexOf("); });", StringComparison.Ordinal);
-            if (start < 0 || end <= start) throw RezkaException.Parse("video json");
+            // fallback: HTML or script response like sof.tv.initCDNSeriesEvents(..., {"id":"cdnplayer", ...});
+            var initCdnMatch = System.Text.RegularExpressions.Regex.Match(
+                body,
+                @"sof\.tv\.initCDN(?:Series|Movies)Events\([^;]+?,\s*(\{[^;]+?\})\);",
+                System.Text.RegularExpressions.RegexOptions.Singleline);
 
-            using var doc = JsonDocument.Parse(body[start..end]);
-            root = doc.RootElement.Clone();
+            if (initCdnMatch.Success)
+            {
+                using var doc = JsonDocument.Parse(initCdnMatch.Groups[1].Value);
+                root = doc.RootElement.Clone();
+            }
+            else
+            {
+                var cdnplayerMatch = System.Text.RegularExpressions.Regex.Match(
+                    body,
+                    @"\{""id""\s*:\s*""cdnplayer"".*?\}(?=\);)",
+                    System.Text.RegularExpressions.RegexOptions.Singleline);
+
+                if (cdnplayerMatch.Success)
+                {
+                    using var doc = JsonDocument.Parse(cdnplayerMatch.Value);
+                    root = doc.RootElement.Clone();
+                }
+                else
+                {
+                    var start = body.IndexOf("{\"id\":", StringComparison.Ordinal);
+                    if (start < 0) start = body.IndexOf('{');
+                    var end = body.LastIndexOf('}');
+                    if (start < 0 || end <= start) throw RezkaException.Parse("video json");
+
+                    var jsonSlice = body.Substring(start, end - start + 1);
+                    using var doc = JsonDocument.Parse(jsonSlice);
+                    root = doc.RootElement.Clone();
+                }
+            }
         }
 
         string? encrypted = null;
