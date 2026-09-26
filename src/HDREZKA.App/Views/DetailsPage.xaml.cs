@@ -189,6 +189,12 @@ public sealed partial class DetailsPage : Page
         }
 
         DescriptionText.Text = details.Description ?? "";
+        if (SettingsService.Instance.UseLocalBookmarks)
+        {
+            BookmarkText.Text = LocalBookmarkService.Instance.IsBookmarked(details.Id)
+                ? Loc.Get("Common.RemoveFromBookmarks")
+                : Loc.Get("Common.AddToBookmarks");
+        }
         RatingsPanel.Children.Clear();
         AddRating("Rezka", details.SiteRating);
         AddRating("IMDb", details.ImdbRating);
@@ -776,6 +782,36 @@ public sealed partial class DetailsPage : Page
     private async void BookmarkButton_Click(object sender, RoutedEventArgs e)
     {
         if (_details == null) return;
+
+        if (SettingsService.Instance.UseLocalBookmarks)
+        {
+            var isBookmarked = LocalBookmarkService.Instance.IsBookmarked(_details.Id);
+            if (isBookmarked)
+            {
+                LocalBookmarkService.Instance.RemoveBookmark(_details.Id);
+                BookmarkText.Text = Loc.Get("Common.AddToBookmarks");
+                return;
+            }
+
+            var categories = LocalBookmarkService.Instance.GetCategories();
+            var menu = new MenuFlyout();
+            foreach (var category in categories)
+            {
+                var item = new MenuFlyoutItem
+                {
+                    Text = category.Name,
+                    Tag = category.Id,
+                };
+                item.Click += (_, _) =>
+                {
+                    LocalBookmarkService.Instance.AddBookmark(_details, category.Id);
+                    BookmarkText.Text = Loc.Get("Common.RemoveFromBookmarks");
+                };
+                menu.Items.Add(item);
+            }
+            menu.ShowAt(BookmarkButton, new Windows.Foundation.Point());
+            return;
+        }
 
         if (!RezkaService.Instance.IsLoggedIn)
         {
