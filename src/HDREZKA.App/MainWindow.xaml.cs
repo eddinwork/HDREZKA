@@ -262,7 +262,7 @@ else
                 if (ContentFrame.Content is not CatalogPage) ContentFrame.Navigate(typeof(CatalogPage));
                 break;
             case "Bookmarks":
-                if (!RezkaService.Instance.IsLoggedIn)
+                if (!SettingsService.Instance.UseLocalBookmarks && !RezkaService.Instance.IsLoggedIn)
                 {
                     _ = ShowLoginDialog();
                     sender.SelectedItem = null;
@@ -271,7 +271,7 @@ else
                 if (ContentFrame.Content is not BookmarksPage) ContentFrame.Navigate(typeof(BookmarksPage));
                 break;
             case "Continue":
-                if (!RezkaService.Instance.IsLoggedIn)
+                if (!SettingsService.Instance.UseLocalContinue && !RezkaService.Instance.IsLoggedIn)
                 {
                     _ = ShowLoginDialog();
                     sender.SelectedItem = null;

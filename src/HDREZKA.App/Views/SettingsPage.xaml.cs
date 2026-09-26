@@ -59,6 +59,8 @@ public sealed partial class SettingsPage : Page
         PosterSizeBox.SelectedIndex = posterIndex >= 0 ? posterIndex : 1;
 
         HeadersToggle.IsOn = settings.UseAndroidHeaders;
+        LocalBookmarksToggle.IsOn = settings.UseLocalBookmarks;
+        LocalContinueToggle.IsOn = settings.UseLocalContinue;
         DirectPlayCheck.IsChecked = settings.PlayFromHomeDirectly;
         SeriesToggle.IsOn = settings.SeriesUpdatesEnabled;
         VersionText.Text = $"HDREZKA for Windows · {UpdateService.CurrentVersion} (20.09.2026)";
@@ -117,6 +119,10 @@ public sealed partial class SettingsPage : Page
         BuildHomeSectionsList();
         HeadersHeader.Text = Loc.Get("Settings.Headers");
         HeadersHint.Text = Loc.Get("Settings.HeadersHint");
+        LocalBookmarksHeader.Text = Loc.Get("Settings.LocalBookmarks");
+        LocalBookmarksHint.Text = Loc.Get("Settings.LocalBookmarksHint");
+        LocalContinueHeader.Text = Loc.Get("Settings.LocalContinue");
+        LocalContinueHint.Text = Loc.Get("Settings.LocalContinueHint");
         AutoMirrorButton.Content = Loc.Get("Settings.AutoMirror");
         DonateHeader.Text = Loc.Get("Settings.Donate");
         DonateHint.Text = Loc.Get("Settings.DonateHint");
@@ -285,6 +291,20 @@ public sealed partial class SettingsPage : Page
         SettingsService.Instance.UseAndroidHeaders = HeadersToggle.IsOn;
         SettingsService.Instance.Save();
         RezkaService.Instance.ApplySettings();
+    }
+
+    private void LocalBookmarksToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (!_initialized) return;
+        SettingsService.Instance.UseLocalBookmarks = LocalBookmarksToggle.IsOn;
+        SettingsService.Instance.Save();
+    }
+
+    private void LocalContinueToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (!_initialized) return;
+        SettingsService.Instance.UseLocalContinue = LocalContinueToggle.IsOn;
+        SettingsService.Instance.Save();
     }
 
     private void DirectPlayCheck_Changed(object sender, RoutedEventArgs e)
