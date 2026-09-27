@@ -59,6 +59,17 @@ public sealed partial class PlayerPage : Page
     }
     private bool _seeking;
     private bool _switching;
+
+    /// <summary>
+    /// True while a NEW episode is being resolved/loaded (network in flight
+    /// after _launch was already swapped). Timer saves are skipped in this
+    /// window, otherwise the old player's position gets stored under the
+    /// new episode's key and it "starts at the end".
+    /// </summary>
+    private bool _loadingEpisode;
+
+    /// <summary>Last known duration (for seek preview while dragging).</summary>
+    private long _lastTotalMs;
     private bool _endReached;
     private long _pendingSeekMs;
     private DateTime _lastTimeChanged = DateTime.MinValue;
@@ -91,6 +102,13 @@ public sealed partial class PlayerPage : Page
             ApplyWindowChrome();
             ReturnFocus();
         };
+
+        // Slider Thumb marks presses handled: subscribe anyway, otherwise
+        // _seeking never engages and position updates fight the drag.
+        SeekSlider.AddHandler(
+            UIElement.PointerPressedEvent,
+            new PointerEventHandler((_, e) => _seeking = true),
+            handledEventsToo: true);
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -769,6 +787,7 @@ public sealed partial class PlayerPage : Page
         {
             posMs = (long)sender.Position.TotalMilliseconds;
             totalMs = (long)sender.NaturalDuration.TotalMilliseconds;
+            if (totalMs > 0) _lastTotalMs = totalMs;
         }
         catch
         {
@@ -1001,7 +1020,16 @@ public sealed partial class PlayerPage : Page
         SavePosition(final: true);
         _launch = _launch with { Season = nextSeason, Episode = nextEpisode };
         UpdateEpisodeText();
-        await LoadVideoAsync(seekToSaved: true);
+        _loadingEpisode = true;
+        try
+        {
+            await LoadVideoAsync(seekToSaved: true);
+        }
+        finally
+        {
+            _loadingEpisode = false;
+        }
+
         return true;
     }
 
@@ -1029,9 +1057,19 @@ public sealed partial class PlayerPage : Page
 
         if (prevEpisode == null) return false;
 
+        SavePosition(final: true);
         _launch = _launch with { Season = prevSeason, Episode = prevEpisode };
         UpdateEpisodeText();
-        await LoadVideoAsync(seekToSaved: true);
+        _loadingEpisode = true;
+        try
+        {
+            await LoadVideoAsync(seekToSaved: true);
+        }
+        finally
+        {
+            _loadingEpisode = false;
+        }
+
         return true;
     }
 
@@ -1072,18 +1110,40 @@ public sealed partial class PlayerPage : Page
 
     private void SeekSlider_PointerPressed(object sender, PointerRoutedEventArgs e) => _seeking = true;
 
-    private void SeekSlider_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
-    {
-        if (_player?.PlaybackSession.NaturalDuration.TotalMilliseconds is double total && total > 0)
-        {
-            _player.PlaybackSession.Position = TimeSpan.FromMilliseconds(total * SeekSlider.Value / 1000.0);
-        }
+    private void SeekSlider_PointerReleased(object sender, PointerRoutedEventArgs e) => DoSeekFromSlider();
 
-        _seeking = false;
+    private void SeekSlider_PointerCanceled(object sender, PointerRoutedEventArgs e) => _seeking = false;
+
+    private void SeekSlider_PointerCaptureLost(object sender, PointerRoutedEventArgs e) => DoSeekFromSlider();
+
+    private void DoSeekFromSlider()
+    {
+        try
+        {
+            if (_player?.PlaybackSession.NaturalDuration.TotalMilliseconds is double total && total > 0)
+            {
+                var target = Math.Clamp(total * SeekSlider.Value / 1000.0, 0, total);
+                _player.PlaybackSession.Position = TimeSpan.FromMilliseconds(target);
+                CurrentTimeText.Text = FormatTime((long)target);
+            }
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+        finally
+        {
+            _seeking = false;
+        }
     }
 
     private void SeekSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
+        // Live scrub preview while dragging (player updates are paused via _seeking).
+        if (_seeking && _lastTotalMs > 0)
+        {
+            CurrentTimeText.Text = FormatTime((long)(_lastTotalMs * SeekSlider.Value / 1000.0));
+        }
     }
 
     private void VolumeSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
@@ -1169,6 +1229,9 @@ public sealed partial class PlayerPage : Page
     private void SavePosition(bool final = false)
     {
         if (_launch == null || _player == null || _endReached && final) return;
+        // Episode switch in flight (_launch already swapped, old player still
+        // seeks): skip timer saves so stale positions don't poison the new key.
+        if (_loadingEpisode && !final) return;
 
         try
         {
