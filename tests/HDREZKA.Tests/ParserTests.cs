@@ -301,6 +301,35 @@ public class ParserTests
     }
 
     [Fact]
+    public void ParseDetails_AvailableWithoutPlayerContainer_Works()
+    {
+        // No .b-player__container_cdn, but translators list present:
+        // title must still count as available (ajax playback path).
+        var html = """
+            <html><body>
+            <div id="wrapper">
+            <div class="b-content__main">
+              <div class="b-post__title">Тестовый фильм</div>
+              <input type="hidden" id="ctrl_favs" value="f1">
+              <div id="translators-list">
+                <ul>
+                  <li class="b-translator__item active" data-translator_id="128" data-camrip="" data-ads="" data-director="">Дубляж</li>
+                </ul>
+              </div>
+              <div id="comments-list-button">Комментарии <em>0</em></div>
+            </div>
+            </div></body></html>
+            """;
+
+        var details = Parsers.ParseDetails(html, "films/999-test.html");
+
+        Assert.True(details.IsAvailable);
+        Assert.False(details.IsComingSoon);
+        Assert.NotNull(details.VoiceActings);
+        Assert.Single(details.VoiceActings!);
+    }
+
+    [Fact]
     public void ParseSeasonsResponse_Json_Works()
     {
         var seasonsHtml = "<ul id='simple-seasons-tabs'><li class='b-simple_season__item active' data-tab_id='1'>1 сезон</li><li class='b-simple_season__item' data-tab_id='2'>2 сезон</li></ul>";

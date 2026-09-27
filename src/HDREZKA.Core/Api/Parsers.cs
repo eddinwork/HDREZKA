@@ -201,7 +201,7 @@ public static class Parsers
         var poster = content.QuerySelector(".b-sidecover a img")?.GetAttribute("src");
         var description = content.QuerySelector(".b-post__description .b-post__description_text") is { } d ? Text(d) : null;
 
-        var isAvailable = doc.QuerySelectorAll(".b-player__container_cdn").Length > 0;
+        var isAvailable = IsPlayerAvailable(doc, html);
         var isComingSoon = doc.QuerySelectorAll(".b-post__status_logo").Length > 0;
 
         IReadOnlyList<MovieVoiceActing>? voices = null;
@@ -563,8 +563,19 @@ public static class Parsers
         return best != null && bestItem != null ? (best.Value, bestItem) : null;
     }
 
-    // ---------- person ----------
+    /// <summary>
+    /// The player block is the primary marker, but mirrors/regions sometimes
+    /// serve pages without it while the title is still playable via ajax
+    /// (translators list or initCDN*Events bootstrap). Any marker counts —
+    /// otherwise whole catalogs falsely show "unavailable".
+    /// </summary>
+    public static bool IsPlayerAvailable(IDocument doc, string html) =>
+        doc.QuerySelectorAll(".b-player__container_cdn").Length > 0
+        || doc.QuerySelectorAll("#translators-list .b-translator__item").Length > 0
+        || html.Contains("initCDNMoviesEvents", StringComparison.Ordinal)
+        || html.Contains("initCDNSeriesEvents", StringComparison.Ordinal);
 
+    // ---------- person ----------
     public static PersonDetailed ParsePerson(string html, string pagePath)
     {
         var doc = ParseHtml(html);
