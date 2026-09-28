@@ -9,6 +9,20 @@
     Background="Black"
     RequestedTheme="Dark">
 
+    <!-- Global shortcuts: work regardless of which control has focus -->
+    <Page.KeyboardAccelerators>
+        <KeyboardAccelerator Key="Left" Invoked="SeekBackInvoked"/>
+        <KeyboardAccelerator Key="Right" Invoked="SeekForwardInvoked"/>
+        <KeyboardAccelerator Key="Space" Invoked="PlayPauseInvoked"/>
+        <KeyboardAccelerator Key="F" Invoked="FullscreenInvoked"/>
+        <KeyboardAccelerator Key="Escape" Invoked="EscapeInvoked"/>
+        <KeyboardAccelerator Key="N" Invoked="NextInvoked"/>
+        <KeyboardAccelerator Key="P" Invoked="PrevInvoked"/>
+        <KeyboardAccelerator Key="Up" Invoked="VolumeUpInvoked"/>
+        <KeyboardAccelerator Key="Down" Invoked="VolumeDownInvoked"/>
+        <KeyboardAccelerator Key="M" Invoked="MuteInvoked"/>
+    </Page.KeyboardAccelerators>
+
     <Grid x:Name="RootGrid"
           Background="Black"
           IsTabStop="True"
@@ -214,6 +228,9 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="12,0,0,0">
+                        <Button x:Name="DownloadButton" Click="DownloadButton_Click" Background="Transparent" BorderThickness="0" Padding="8" Visibility="Collapsed">
+                            <FontIcon Glyph="&#xE896;" Foreground="White" FontSize="15"/>
+                        </Button>
                         <Button x:Name="ExternalButton" Click="ExternalButton_Click" Background="Transparent" BorderThickness="0" Padding="8">
                             <FontIcon Glyph="&#xE8AD;" Foreground="White" FontSize="15"/>
                         </Button>

@@ -330,6 +330,33 @@ public class ParserTests
     }
 
     [Fact]
+    public void DonorCode_Generate_Validates()
+    {
+        for (var i = 0; i < 5; i++)
+        {
+            var code = DonorCode.Generate();
+            Assert.Equal(14, code.Length); // XXXX-XXXX-XXXX
+            Assert.True(DonorCode.Validate(code));
+            Assert.True(DonorCode.Validate(code.ToLowerInvariant().Replace("-", " ")));
+        }
+    }
+
+    [Fact]
+    public void DonorCode_Random_Rejects()
+    {
+        Assert.False(DonorCode.Validate(null));
+        Assert.False(DonorCode.Validate(""));
+        Assert.False(DonorCode.Validate("AAAAAAAA-AAAA"));
+        Assert.False(DonorCode.Validate("ABCDEFGH-IJKL"));
+        Assert.False(DonorCode.Validate("....-....-...."));
+
+        // Tampered checksum fails.
+        var good = DonorCode.Generate().Replace("-", "");
+        var bad = good[..11] + (good[11] == 'A' ? 'B' : 'A');
+        Assert.False(DonorCode.Validate(bad));
+    }
+
+    [Fact]
     public void ParseSeasonsResponse_Json_Works()
     {
         var seasonsHtml = "<ul id='simple-seasons-tabs'><li class='b-simple_season__item active' data-tab_id='1'>1 сезон</li><li class='b-simple_season__item' data-tab_id='2'>2 сезон</li></ul>";

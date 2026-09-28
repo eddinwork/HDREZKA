@@ -115,6 +115,11 @@
                             </StackPanel>
                         </StackPanel>
                     </Border>
+                    <TextBlock x:Name="DonorHeader" FontWeight="SemiBold" Margin="0,12,0,0"/>
+                    <TextBox x:Name="DonorBox" MaxWidth="280" HorizontalAlignment="Left" LostFocus="DonorBox_LostFocus"/>
+                    <TextBlock x:Name="DonorHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640"/>
+                    <TextBlock x:Name="DonorStatusText" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" MaxWidth="640"/>
+                    <TextBlock x:Name="DonorPerksText" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="640" Visibility="Collapsed"/>
                 </StackPanel>
             </Expander>
 

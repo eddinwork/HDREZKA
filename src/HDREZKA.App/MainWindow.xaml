@@ -95,5 +95,20 @@
 
             <Frame x:Name="ContentFrame" />
         </NavigationView>
+
+        <!-- Floating downloads progress: visible while anything downloads -->
+        <Button x:Name="DownloadsFab" Grid.Row="0" Grid.RowSpan="2" Click="DownloadsButton_Click"
+                Width="56" Height="56" CornerRadius="28" Padding="0"
+                HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,20,24"
+                Background="{ThemeResource AccentFillColorDefaultBrush}"
+                BorderThickness="0" Visibility="Collapsed">
+            <Grid Width="40" Height="40">
+                <ProgressRing x:Name="DownloadsRing" Width="40" Height="40"
+                              Minimum="0" Maximum="100" IsIndeterminate="False"
+                              Foreground="White" Background="#44FFFFFF"/>
+                <TextBlock x:Name="DownloadsCountText" FontSize="15" FontWeight="SemiBold" Foreground="White"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+        </Button>
     </Grid>
 </Window>

@@ -109,6 +109,9 @@ public sealed partial class PlayerPage : Page
             UIElement.PointerPressedEvent,
             new PointerEventHandler((_, e) => _seeking = true),
             handledEventsToo: true);
+
+        // Download button visibility must survive VSM transitions.
+        ControlSizeStates.CurrentStateChanged += (_, _) => ApplyDownloadVisibility();
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -128,6 +131,7 @@ public sealed partial class PlayerPage : Page
         UpdateEpisodeText();
         ApplyLocalization();
         ApplyWindowChrome();
+        ApplyDownloadVisibility();
 
         _ = LoadVideoAsync(seekToSaved: true);
     }
@@ -352,6 +356,13 @@ public sealed partial class PlayerPage : Page
 
         try
         {
+            // Offline file: no site requests at all.
+            if (!string.IsNullOrEmpty(_launch.LocalFile) && File.Exists(_launch.LocalFile))
+            {
+                await LoadLocalFileAsync(_launch.LocalFile, seekToSaved);
+                return;
+            }
+
             _video = await RezkaService.Instance.Client.GetMovieVideoAsync(
                 _launch.Voice, _launch.Season, _launch.Episode, _launch.Details.Favs);
 
@@ -433,6 +444,41 @@ public sealed partial class PlayerPage : Page
             _switching = false;
             _endReached = false;
         }
+    }
+
+    /// <summary>Offline playback: local file, no network, no qualities/subs.</summary>
+    private async Task LoadLocalFileAsync(string path, bool seekToSaved)
+    {
+        _video = new MovieVideo([], [], false, null);
+        BuildQualityBox();
+        BuildSubtitlesBox(_video);
+
+        _pendingSeekMs = seekToSaved ? GetSavedPositionMs() : 0;
+
+        MediaSource source;
+        try
+        {
+            source = MediaSource.CreateFromUri(new Uri(path));
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+            ShowStatus(Loc.Get("Details.NoVideo"));
+            return;
+        }
+
+        _currentSource = source;
+        _mediaOpened = false;
+        var gen = ++_loadGen;
+
+        _playbackItem = new MediaPlaybackItem(source);
+        var player = _player;
+        if (player == null) return;
+        player.Source = _playbackItem;
+        ApplySpeed();
+        App.TryLog(new Exception("[Player] Local source set, pending seek=" + _pendingSeekMs));
+        _ = WatchOpenTimeoutAsync(gen);
+        await Task.CompletedTask;
     }
 
     private void BuildSubtitles(MediaSource source, MovieVideo video)
@@ -575,9 +621,58 @@ public sealed partial class PlayerPage : Page
         ToggleFullscreen();
     }
 
+    private async void DownloadButton_Click(object sender, RoutedEventArgs e)
+    {
+        ReturnFocus();
+        if (!DonorUnlock.IsUnlocked)
+        {
+            await DownloadDialog.ShowLockedAsync(Content.XamlRoot);
+            return;
+        }
+
+        // Active downloads → manage them; otherwise start the current one.
+        if (DownloadService.HasActive)
+        {
+            await DownloadDialog.ShowActiveAsync(Content.XamlRoot);
+            return;
+        }
+
+        if (_launch == null) return;
+        var job = DownloadJobs.Episode(
+            _launch.Details, _launch.Voice, _launch.Season, _launch.Episode, _quality);
+        await DownloadDialog.RunAsync(Content.XamlRoot, [job]);
+    }
+
+    /// <summary>
+    /// Download button exists only for unlocked users (VSM setters would
+    /// otherwise re-show it on every narrow/wide transition).
+    /// </summary>
+    private void ApplyDownloadVisibility()
+    {
+        var wide = ControlSizeStates.CurrentState?.Name != "NarrowLayout";
+        DownloadButton.Visibility = DonorUnlock.IsUnlocked && wide && string.IsNullOrEmpty(_launch?.LocalFile)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
     private async void ExternalButton_Click(object sender, RoutedEventArgs e)
     {
         ReturnFocus();
+        // Offline file: open it directly.
+        if (!string.IsNullOrEmpty(_launch?.LocalFile))
+        {
+            try
+            {
+                await Windows.System.Launcher.LaunchUriAsync(new Uri(_launch.LocalFile));
+            }
+            catch (Exception ex)
+            {
+                App.TryLog(ex);
+                ShowStatus(Loc.Get("Details.NoVideo"));
+            }
+
+            return;
+        }
+
         var url = _video?.Videos.FirstOrDefault(v => v.Quality == _quality)?.Urls.FirstOrDefault()
             ?? _video?.GetMaxQuality()?.Urls.FirstOrDefault();
         if (string.IsNullOrEmpty(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
@@ -845,6 +940,9 @@ public sealed partial class PlayerPage : Page
     /// <summary>When the current buffering episode started (null = not buffering).</summary>
     private DateTime? _bufferStart;
 
+    /// <summary>Stalls right after a user seek are the seek itself, not a slow CDN.</summary>
+    private DateTime _ignoreStallUntil = DateTime.MinValue;
+
     private void OnPlaybackStateChanged(MediaPlaybackSession sender, object args)
     {
         var state = sender.PlaybackState;
@@ -877,7 +975,9 @@ public sealed partial class PlayerPage : Page
                         // counts. Short rebuffers from seeks/pauses are normal.
                         var bufferingFor = DateTime.UtcNow - _bufferStart.Value;
                         _bufferStart = null;
-                        if (bufferingFor.TotalSeconds >= 4 && !_switching)
+                        if (bufferingFor.TotalSeconds >= 4 &&
+                            DateTime.UtcNow >= _ignoreStallUntil &&
+                            !_switching)
                         {
                             MaybeDropQualityOnStall();
                         }
@@ -1125,6 +1225,7 @@ public sealed partial class PlayerPage : Page
                 var target = Math.Clamp(total * SeekSlider.Value / 1000.0, 0, total);
                 _player.PlaybackSession.Position = TimeSpan.FromMilliseconds(target);
                 CurrentTimeText.Text = FormatTime((long)target);
+                _ignoreStallUntil = DateTime.UtcNow.AddSeconds(5);
             }
         }
         catch (Exception ex)
@@ -1135,6 +1236,88 @@ public sealed partial class PlayerPage : Page
         {
             _seeking = false;
         }
+    }
+
+    private void SeekBySeconds(int seconds)
+    {
+        if (_player == null) return;
+        try
+        {
+            var session = _player.PlaybackSession;
+            var totalMs = session.NaturalDuration.TotalMilliseconds;
+            var targetMs = session.Position.TotalMilliseconds + seconds * 1000L;
+            targetMs = totalMs > 0 ? Math.Clamp(targetMs, 0, totalMs) : Math.Max(0, targetMs);
+            session.Position = TimeSpan.FromMilliseconds(targetMs);
+            _ignoreStallUntil = DateTime.UtcNow.AddSeconds(5);
+            ReturnFocus();
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+    }
+
+    private void SeekBackInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        SeekBySeconds(-10);
+        args.Handled = true;
+    }
+
+    private void SeekForwardInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        SeekBySeconds(10);
+        args.Handled = true;
+    }
+
+    private void PlayPauseInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        PlayPauseButton_Click(this, new RoutedEventArgs());
+        args.Handled = true;
+    }
+
+    private void FullscreenInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        ToggleFullscreen();
+        args.Handled = true;
+    }
+
+    private void EscapeInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (_isFullscreen)
+        {
+            ExitFullscreen();
+            args.Handled = true;
+        }
+    }
+
+    private void NextInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        _ = TryNextEpisodeAsync(auto: false);
+        args.Handled = true;
+    }
+
+    private void PrevInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        _ = TryPrevEpisodeAsync();
+        args.Handled = true;
+    }
+
+    private void VolumeUpInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        VolumeSlider.Value = Math.Min(100, VolumeSlider.Value + 5);
+        args.Handled = true;
+    }
+
+    private void VolumeDownInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        VolumeSlider.Value = Math.Max(0, VolumeSlider.Value - 5);
+        args.Handled = true;
+    }
+
+    private void MuteInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        MuteButton_Click(this, new RoutedEventArgs());
+        args.Handled = true;
     }
 
     private void SeekSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
@@ -1241,7 +1424,8 @@ public sealed partial class PlayerPage : Page
 
             PersistPosition(_launch, time, length, _quality);
 
-            if (RezkaService.Instance.IsLoggedIn && (DateTime.UtcNow - _lastSiteSave).TotalSeconds > 25)
+            // Local files never touch the server.
+            if (_launch.LocalFile == null && RezkaService.Instance.IsLoggedIn && (DateTime.UtcNow - _lastSiteSave).TotalSeconds > 25)
             {
                 _lastSiteSave = DateTime.UtcNow;
                 _ = RezkaService.Instance.Client.SaveWatchingAsync(
@@ -1455,24 +1639,15 @@ public sealed partial class PlayerPage : Page
                 PlayPauseButton_Click(this, new RoutedEventArgs());
                 e.Handled = true;
                 break;
-            case VirtualKey.Left when _player != null:
-            {
-                var pos = _player.PlaybackSession.Position.TotalMilliseconds;
-                _player.PlaybackSession.Position = TimeSpan.FromMilliseconds(Math.Max(0, pos - 10_000));
+            case VirtualKey.Left:
+                SeekBySeconds(-10);
                 e.Handled = true;
                 break;
-            }
 
-            case VirtualKey.Right when _player != null:
-            {
-                var session = _player.PlaybackSession;
-                var totalMs = session.NaturalDuration.TotalMilliseconds;
-                var targetMs = session.Position.TotalMilliseconds + 10_000;
-                if (totalMs > 0) targetMs = Math.Min(totalMs, targetMs);
-                session.Position = TimeSpan.FromMilliseconds(Math.Max(0, targetMs));
+            case VirtualKey.Right:
+                SeekBySeconds(10);
                 e.Handled = true;
                 break;
-            }
             case VirtualKey.Up:
                 VolumeSlider.Value = Math.Min(100, VolumeSlider.Value + 5);
                 e.Handled = true;

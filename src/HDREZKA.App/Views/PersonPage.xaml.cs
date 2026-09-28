@@ -104,10 +104,7 @@ public sealed partial class PersonPage : Page
     {
         NameText.Text = details.Name;
         OrigText.Text = details.OriginalName ?? "";
-        if (!string.IsNullOrEmpty(details.Photo))
-        {
-            PersonPoster.Source = new BitmapImage(new Uri(details.Photo));
-        }
+        PosterCache.SetSource(PersonPoster, details.Photo);
 
         MetaPanel.Children.Clear();
         AddMetaRow(Loc.Get("Person.Career"), details.Career);

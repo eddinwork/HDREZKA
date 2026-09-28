@@ -14,7 +14,8 @@ public sealed record PlayerLaunch(
     MovieVoiceActing Voice,
     IReadOnlyList<MovieSeason>? Seasons,
     MovieSeason? Season,
-    MovieEpisode? Episode);
+    MovieEpisode? Episode,
+    string? LocalFile = null);
 
 public sealed partial class DetailsPage : Page
 {
@@ -104,7 +105,9 @@ public sealed partial class DetailsPage : Page
         BookmarkText.Text = Loc.Get("Common.AddToBookmarks");
         WatchedText.Text = Loc.Get("Continue.ToggleWatched");
         TrackText.Text = Loc.Get("Details.Track");
-        WatchAlsoHeader.Text = Loc.Get("Details.WatchAlso");
+        TrailerText.Text = Loc.Get("Common.Trailer");
+        DownloadText.Text = Loc.Get("Downloads.Download");
+        SeasonDownloadText.Text = Loc.Get("Downloads.Season");
         if (_details != null) RenderSchedule(_details);
         VoicesHeader.Text = Loc.Get("Common.VoiceActing");
         SeasonsHeader.Text = Loc.Get("Common.Season");
@@ -150,10 +153,7 @@ public sealed partial class DetailsPage : Page
     {
         TitleText.Text = details.Name;
         OrigTitleText.Text = details.OriginalName ?? "";
-        if (!string.IsNullOrEmpty(details.Poster))
-        {
-            PosterImage.Source = new BitmapImage(new Uri(details.Poster));
-        }
+        PosterCache.SetSource(PosterImage, details.Poster);
 
         DescriptionText.Text = details.Description ?? "";
         RatingsPanel.Children.Clear();
@@ -190,6 +190,7 @@ public sealed partial class DetailsPage : Page
         _episode = _season?.Episodes.FirstOrDefault(ep => ep.IsSelected) ?? _season?.Episodes.FirstOrDefault();
 
         RenderSeasons();
+        UpdateSeasonDownloadVisibility();
 
         WatchButton.IsEnabled = details.IsAvailable && !details.IsComingSoon && _voice != null;
         if (details.IsComingSoon)
@@ -210,17 +211,9 @@ public sealed partial class DetailsPage : Page
 
         UpdateWatchedButton();
         UpdateTrackButton();
-        RenderWatchAlso(details);
         UpdateVoicesRatingButton(details);
         RenderSchedule(details);
         try { App.TryLog(new Exception("[Details] Rendered " + details.Id)); } catch { }
-    }
-
-    private void RenderWatchAlso(MovieDetailed details)
-    {
-        // BISECT 22.09: disabled while hunting the DetailsPage native crash.
-        WatchAlsoList.Children.Clear();
-        WatchAlsoPanel.Visibility = Visibility.Collapsed;
     }
 
     private void UpdateVoicesRatingButton(MovieDetailed details)
@@ -552,6 +545,8 @@ public sealed partial class DetailsPage : Page
         WatchedButton.IsEnabled = key != null;
         WatchedButton.IsChecked = key != null &&
             PositionService.Instance.IsWatched(key.Value.MovieId, key.Value.TranslatorId, key.Value.SeasonId, key.Value.EpisodeId);
+        // Selection-dependent download buttons refresh together.
+        UpdateDownloadVisibility();
     }
 
     private void UpdateTrackButton()
@@ -566,6 +561,21 @@ public sealed partial class DetailsPage : Page
         if (_details == null) return;
         var now = TrackedSeriesService.ToggleTracked(_details.Id, _details.Name, _details.Poster);
         TrackButton.IsChecked = now;
+    }
+
+    private async void TrailerButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_details == null) return;
+        var query = $"{_details.OriginalName ?? _details.Name} {(_details.Year ?? "").Trim()} трейлер".Trim();
+        try
+        {
+            await Windows.System.Launcher.LaunchUriAsync(
+                new Uri("https://www.youtube.com/results?search_query=" + Uri.EscapeDataString(query)));
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
     }
 
     private void WatchedButton_Click(object sender, RoutedEventArgs e)
@@ -633,6 +643,7 @@ public sealed partial class DetailsPage : Page
         }
 
         UpdateWatchedButton();
+        UpdateSeasonDownloadVisibility();
     }
 
     private void RenderSeasons()
@@ -673,7 +684,70 @@ public sealed partial class DetailsPage : Page
             _episode = season.Episodes.FirstOrDefault();
             RenderEpisodes();
             UpdateWatchedButton();
+            UpdateSeasonDownloadVisibility();
         }
+    }
+
+    private async void SeasonDownloadButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!DonorUnlock.IsUnlocked)
+        {
+            await DownloadDialog.ShowLockedAsync(Content.XamlRoot);
+            return;
+        }
+
+        if (DownloadService.HasActive)
+        {
+            await DownloadDialog.ShowActiveAsync(Content.XamlRoot);
+            return;
+        }
+
+        if (_details == null || _voice == null || _season == null) return;
+        var quality = await DownloadDialog.PickQualityAsync(
+            Content.XamlRoot, SettingsService.Instance.DefaultQuality);
+        if (quality == null) return;
+        var jobs = DownloadJobs.Season(_details, _voice, _season, quality).ToList();
+        await DownloadDialog.RunAsync(Content.XamlRoot, jobs);
+    }
+
+    /// <summary>Season download exists only for unlocked users.</summary>
+    private void UpdateSeasonDownloadVisibility()
+    {
+        SeasonDownloadButton.Visibility = DonorUnlock.IsUnlocked && _season != null
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        UpdateDownloadVisibility();
+    }
+
+    /// <summary>Single download (film or selected episode) for unlocked users.</summary>
+    private void UpdateDownloadVisibility()
+    {
+        DownloadButton.Visibility = DonorUnlock.IsUnlocked && _details != null && _voice != null
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private async void DownloadButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!DonorUnlock.IsUnlocked)
+        {
+            await DownloadDialog.ShowLockedAsync(Content.XamlRoot);
+            return;
+        }
+
+        if (_details == null || _voice == null) return;
+
+        if (DownloadService.HasActive)
+        {
+            await DownloadDialog.ShowActiveAsync(Content.XamlRoot);
+            return;
+        }
+
+        var quality = await DownloadDialog.PickQualityAsync(
+            Content.XamlRoot, SettingsService.Instance.DefaultQuality);
+        if (quality == null) return;
+        var job = DownloadJobs.Episode(_details, _voice, _season, _episode, quality);
+        await DownloadDialog.RunAsync(Content.XamlRoot, [job]);
     }
 
     private void RenderEpisodes()

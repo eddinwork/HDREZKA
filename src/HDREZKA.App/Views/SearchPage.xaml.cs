@@ -39,6 +39,7 @@ public sealed partial class SearchPage : Page
     {
         MoreButton.Content = Loc.Get("Common.LoadMore");
         RetryButton.Content = Loc.Get("Common.Retry");
+        SuggestButton.Content = Loc.Get("Search.Suggest");
     }
 
     private async Task LoadAsync()
@@ -49,6 +50,7 @@ public sealed partial class SearchPage : Page
         StatePanel.Visibility = Visibility.Visible;
         StateText.Text = Loc.Get("Common.Loading");
         RetryButton.Visibility = Visibility.Collapsed;
+        SuggestButton.Visibility = Visibility.Collapsed;
 
         try
         {
@@ -61,6 +63,7 @@ public sealed partial class SearchPage : Page
             {
                 StateText.Text = Loc.Get("Search.Nothing");
                 LoadingRing.IsActive = false;
+                SuggestButton.Visibility = Visibility.Visible;
             }
             else
             {
@@ -74,6 +77,7 @@ public sealed partial class SearchPage : Page
             StateText.Text = RezkaService.Instance.ErrorText(ex);
             LoadingRing.IsActive = false;
             RetryButton.Visibility = Visibility.Visible;
+            SuggestButton.Visibility = Visibility.Collapsed;
         }
         finally
         {
@@ -92,5 +96,10 @@ public sealed partial class SearchPage : Page
         _page = 1;
         _items.Clear();
         _ = LoadAsync();
+    }
+
+    private async void SuggestButton_Click(object sender, RoutedEventArgs e)
+    {
+        await SupportRequest.ShowAsync(Content.XamlRoot, _query);
     }
 }

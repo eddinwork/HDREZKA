@@ -60,6 +60,7 @@ public sealed partial class SettingsPage : Page
 
         HeadersToggle.IsOn = settings.UseAndroidHeaders;
         DirectPlayCheck.IsChecked = settings.PlayFromHomeDirectly;
+        DonorBox.Text = settings.DonorCode;
         SeriesToggle.IsOn = settings.SeriesUpdatesEnabled;
         VersionText.Text = $"HDREZKA for Windows · {UpdateService.CurrentVersion} (20.09.2026)";
 
@@ -123,6 +124,9 @@ public sealed partial class SettingsPage : Page
         DonateCopyButton.Content = Loc.Get("Common.Copy");
         DonateCopiedText.Visibility = Visibility.Collapsed;
         BoostyButton.Content = Loc.Get("Settings.DonateBoosty");
+        DonorHeader.Text = Loc.Get("Settings.DonorCode");
+        DonorHint.Text = Loc.Get("Settings.DonorHint");
+        UpdateDonorStatus();
         UpdateHeader.Text = Loc.Get("Settings.Updates");
         CheckUpdatesButton.Content = Loc.Get("Settings.CheckUpdates");
         SeriesHeader.Text = Loc.Get("Settings.SeriesUpdates");
@@ -394,6 +398,47 @@ public sealed partial class SettingsPage : Page
         {
             App.TryLog(ex);
         }
+    }
+
+    private void DonorBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        var was = DonorUnlock.IsUnlocked;
+        SettingsService.Instance.DonorCode = DonorBox.Text.Trim();
+        SettingsService.Instance.Save();
+        UpdateDonorStatus();
+        if (!was && DonorUnlock.IsUnlocked)
+        {
+            _ = ShowDonorThanksAsync();
+        }
+    }
+
+    private async Task ShowDonorThanksAsync()
+    {
+        try
+        {
+            var dialog = new ContentDialog
+            {
+                Title = Loc.Get("Settings.DonorThanksTitle"),
+                Content = Loc.Get("Settings.DonorThanksText"),
+                CloseButtonText = "OK",
+                XamlRoot = Content.XamlRoot,
+            };
+            await dialog.ShowAsync();
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+    }
+
+    private void UpdateDonorStatus()
+    {
+        var ok = HDREZKA.Core.Api.DonorCode.Validate(SettingsService.Instance.DonorCode);
+        DonorStatusText.Text = string.IsNullOrWhiteSpace(SettingsService.Instance.DonorCode)
+            ? ""
+            : Loc.Get(ok ? "Settings.DonorUnlocked" : "Settings.DonorInvalid");
+        DonorPerksText.Text = ok ? Loc.Get("Settings.DonorPerks") : "";
+        DonorPerksText.Visibility = ok ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async void CheckUpdatesButton_Click(object sender, RoutedEventArgs e)

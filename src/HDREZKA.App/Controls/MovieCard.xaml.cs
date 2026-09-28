@@ -58,10 +58,7 @@ public sealed partial class MovieCard : UserControl
         TitleText.Text = Movie.Name ?? "";
         DetailsText.Text = Movie.Details ?? "";
 
-        if (!string.IsNullOrEmpty(Movie.Poster))
-        {
-            PosterImage.Source = new BitmapImage(new Uri(Movie.Poster));
-        }
+        PosterCache.SetSource(PosterImage, Movie.Poster);
 
         RatingText.Text = Movie.Rating?.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) ?? "";
         (RatingText.Parent as FrameworkElement)!.Visibility = Movie.Rating != null ? Visibility.Visible : Visibility.Collapsed;

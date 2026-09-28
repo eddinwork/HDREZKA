@@ -8,11 +8,13 @@
     mc:Ignorable="d"
     NavigationCacheMode="Required">
 
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
     <Grid Padding="28,12,28,12" RowSpacing="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Logged in state -->
@@ -42,6 +44,7 @@
                 <HyperlinkButton x:Name="RegisterLink" Click="RegisterLink_Click" Padding="0"/>
                 <HyperlinkButton x:Name="PremiumLink" Click="PremiumLink_Click" Padding="0"/>
             </StackPanel>
+            <HyperlinkButton x:Name="SuggestLinkLoggedOut" Click="SuggestLink_Click" HorizontalAlignment="Center" Padding="0"/>
         </StackPanel>
 
         <!-- Account actions -->
@@ -49,6 +52,7 @@
             <Button x:Name="BookmarksButton" Click="BookmarksButton_Click" Style="{ThemeResource AccentButtonStyle}"/>
             <Button x:Name="HistoryButton" Click="HistoryButton_Click" Style="{ThemeResource AccentButtonStyle}"/>
             <HyperlinkButton x:Name="PremiumLinkLoggedIn" Click="PremiumLink_Click" VerticalAlignment="Center"/>
+            <Button x:Name="SuggestButton" Click="SuggestLink_Click"/>
             <Button x:Name="LogoutButton" Click="LogoutButton_Click"/>
         </StackPanel>
 
@@ -56,5 +60,32 @@
         <StackPanel Grid.Row="2" Spacing="8">
             <TextBlock x:Name="DisclaimerText" FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextWrapping="Wrap" MaxWidth="500"/>
         </StackPanel>
+
+        <!-- Offline files -->
+        <StackPanel x:Name="OfflinePanel" Grid.Row="3" Spacing="8" MaxWidth="640" HorizontalAlignment="Left">
+            <TextBlock x:Name="OfflineHeader" Style="{StaticResource SectionHeader}"/>
+            <ListView x:Name="OfflineList" SelectionMode="None" IsItemClickEnabled="True" ItemClick="OfflineList_ItemClick" MaxHeight="320">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Padding="0,8" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding Details}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                    Background="Transparent" BorderThickness="0" Padding="10,6"
+                                    Tag="{Binding}" Click="OfflineDelete_Click" VerticalAlignment="Center"/>
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+            <TextBlock x:Name="OfflineEmptyText" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/>
+            <Button x:Name="OfflineFolderButton" Click="OfflineFolderButton_Click" HorizontalAlignment="Left"/>
+        </StackPanel>
     </Grid>
+    </ScrollViewer>
 </Page>

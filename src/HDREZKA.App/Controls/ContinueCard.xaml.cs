@@ -96,10 +96,7 @@ public sealed partial class ContinueCard : UserControl
         InfoText.Text = data.Info ?? "";
         InfoText.Visibility = string.IsNullOrEmpty(data.Info) ? Visibility.Collapsed : Visibility.Visible;
 
-        if (!string.IsNullOrEmpty(data.Poster) && Uri.TryCreate(data.Poster, UriKind.Absolute, out var uri))
-        {
-            PosterImage.Source = new BitmapImage(uri);
-        }
+        PosterCache.SetSource(PosterImage, data.Poster);
     }
 
     // ---------- interactions ----------

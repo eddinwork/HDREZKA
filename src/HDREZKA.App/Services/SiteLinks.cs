@@ -68,6 +68,25 @@ public static class SiteLinks
         }
     }
 
+    /// <summary>
+    /// Support page via redirect service: support.html is missing on some
+    /// mirrors, rzk.link forwards to a working one.
+    /// </summary>
+    public static Uri? SupportUri
+    {
+        get
+        {
+            try
+            {
+                return new Uri(new Uri(RedirectMirror), "support.html");
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+
     public static async Task OpenAsync(Uri? uri)
     {
         if (uri == null) return;

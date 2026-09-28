@@ -43,6 +43,7 @@
                     <ProgressRing x:Name="LoadingRing" IsActive="True" Width="40" Height="40"/>
                     <TextBlock x:Name="StateText" HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                     <Button x:Name="RetryButton" Click="RetryButton_Click" HorizontalAlignment="Center" Style="{ThemeResource AccentButtonStyle}" Visibility="Collapsed"/>
+                    <HyperlinkButton x:Name="SuggestButton" Click="SuggestButton_Click" HorizontalAlignment="Center" Visibility="Collapsed" Padding="0"/>
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

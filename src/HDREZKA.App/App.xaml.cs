@@ -34,11 +34,26 @@ public partial class App : Application
         {
             var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "HDREZKA");
             Directory.CreateDirectory(dir);
+            var file = Path.Combine(dir, "crash.log");
             var sb = new StringBuilder();
             sb.AppendLine("=== " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff"));
             sb.AppendLine(ex.ToString());
             sb.AppendLine();
-            File.AppendAllText(Path.Combine(dir, "crash.log"), sb.ToString());
+            File.AppendAllText(file, sb.ToString());
+
+            // Rotation: keep the log from growing forever (cap ~512KB, keep tail).
+            try
+            {
+                var info = new FileInfo(file);
+                if (info.Length > 512 * 1024)
+                {
+                    var lines = File.ReadAllLines(file);
+                    File.WriteAllLines(file, lines.Skip(Math.Max(0, lines.Length - 500)));
+                }
+            }
+            catch
+            {
+            }
         }
         catch
         {

@@ -65,6 +65,12 @@
                     <TextBlock x:Name="SeasonsHeader" Style="{StaticResource SectionHeader}"/>
                     <StackPanel Orientation="Horizontal" Spacing="12">
                         <ComboBox x:Name="SeasonBox" MinWidth="180" SelectionChanged="SeasonBox_SelectionChanged"/>
+                        <Button x:Name="SeasonDownloadButton" Click="SeasonDownloadButton_Click" VerticalAlignment="Center" Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE896;" FontSize="14"/>
+                                <TextBlock x:Name="SeasonDownloadText"/>
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                     <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Auto"
                                   VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
@@ -103,6 +109,18 @@
                             <TextBlock x:Name="TrackText"/>
                         </StackPanel>
                     </ToggleButton>
+                    <Button x:Name="TrailerButton" Click="TrailerButton_Click" MinHeight="40">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE714;" FontSize="16"/>
+                            <TextBlock x:Name="TrailerText"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="DownloadButton" Click="DownloadButton_Click" MinHeight="40" Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE896;" FontSize="16"/>
+                            <TextBlock x:Name="DownloadText"/>
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
 
                 <StackPanel x:Name="SchedulePanel" Spacing="8" Margin="0,20,0,0" Visibility="Collapsed">
@@ -112,14 +130,6 @@
                     <StackPanel x:Name="ScheduleList" Spacing="0"/>
                     <Button x:Name="ScheduleMoreButton" Click="ScheduleMoreButton_Click" Visibility="Collapsed"
                             Background="Transparent" BorderThickness="0" Padding="8,4" HorizontalAlignment="Left"/>
-                </StackPanel>
-
-                <StackPanel x:Name="WatchAlsoPanel" Spacing="8" Margin="0,20,0,0" Visibility="Collapsed">
-                    <TextBlock x:Name="WatchAlsoHeader" Style="{StaticResource SectionHeader}"/>
-                    <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Auto"
-                                  VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
-                        <StackPanel x:Name="WatchAlsoList" Orientation="Horizontal"/>
-                    </ScrollViewer>
                 </StackPanel>
 
                 <StackPanel x:Name="CommentsSection" Spacing="10" Margin="0,20,0,0" Visibility="Collapsed">

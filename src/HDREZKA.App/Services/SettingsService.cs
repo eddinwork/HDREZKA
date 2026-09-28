@@ -53,6 +53,12 @@ public sealed class SettingsService
     /// <summary>Home continue cards start playback directly instead of opening details.</summary>
     public bool PlayFromHomeDirectly { get; set; } = true;
 
+    /// <summary>Donor perk code (unlocks MP4 downloads). Validated by checksum.</summary>
+    public string DonorCode { get; set; } = "";
+
+    /// <summary>Custom download folder. Empty = Downloads/HDREZKA.</summary>
+    public string DownloadFolder { get; set; } = "";
+
     /// <summary>
     /// Poster width in px (S=104, M=132, L=164, XL=196). Height is always 1.5x.
     /// </summary>
@@ -142,6 +148,8 @@ public sealed class SettingsService
             LastSeriesCheckUtc = loaded.LastSeriesCheckUtc;
             ContinueOldestFirst = loaded.ContinueOldestFirst;
             PlayFromHomeDirectly = loaded.PlayFromHomeDirectly;
+            DonorCode = loaded.DonorCode ?? "";
+            DownloadFolder = loaded.DownloadFolder ?? "";
             HomeSections = MergeHomeSections(loaded.HomeSections);
         }
         catch

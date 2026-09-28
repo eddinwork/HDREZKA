@@ -40,6 +40,10 @@ public sealed partial class MainWindow : Window
         }
 
         ThemeHelper.SetRoot(RootGrid);
+        RootGrid.ActualThemeChanged += (_, _) =>
+        {
+            DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, RefreshCaptionButtons);
+        };
         try
         {
             SetTitleBar(CustomTitleBar);
@@ -60,14 +64,17 @@ public sealed partial class MainWindow : Window
             }
         };
         RefreshTitleBarLayout();
+        RefreshCaptionButtons();
         Nav.SetFrame(ContentFrame);
         ContentFrame.Navigated += ContentFrame_Navigated;
         LocalizationService.Instance.LanguageChanged += ApplyLocalization;
         RezkaService.Instance.AuthStateChanged += () => DispatcherQueue.TryEnqueue(ApplyAccountState);
         TrackedSeriesService.UpdatesChanged += () => DispatcherQueue.TryEnqueue(UpdateBadge);
+        DownloadService.Instance.Changed += () => DispatcherQueue.TryEnqueue(UpdateDownloadsButton);
         ApplyLocalization();
         ApplyAccountState();
         UpdateBadge();
+        UpdateDownloadsButton();
 
         ContentFrame.Navigate(typeof(HomePage));
         NavView.SelectedItem = NavHome;
@@ -84,7 +91,7 @@ public sealed partial class MainWindow : Window
         NavView.IsBackButtonVisible = on
             ? NavigationViewBackButtonVisible.Collapsed
             : NavigationViewBackButtonVisible.Auto;
-        ApplyTheaterTitleBar(on);
+        RefreshCaptionButtons();
 
         try
         {
@@ -135,12 +142,17 @@ public sealed partial class MainWindow : Window
         finally { _refreshingTitleBar = false; }
     }
 
-    private void ApplyTheaterTitleBar(bool on)
+    /// <summary>
+    /// Single place for caption button colors. Theater mode forces the black
+    /// scheme; otherwise colors follow the effective theme — the system
+    /// defaults leave _ □ X nearly invisible on the light theme.
+    /// </summary>
+    private void RefreshCaptionButtons()
     {
         try
         {
             var tb = AppWindow.TitleBar;
-            if (on)
+            if (IsTheaterMode)
             {
                 tb.BackgroundColor = Microsoft.UI.Colors.Black;
                 tb.InactiveBackgroundColor = Microsoft.UI.Colors.Black;
@@ -152,20 +164,28 @@ public sealed partial class MainWindow : Window
                 tb.ButtonInactiveForegroundColor = Microsoft.UI.Colors.Gray;
                 tb.ButtonHoverBackgroundColor = Microsoft.UI.Colors.DimGray;
                 tb.ButtonHoverForegroundColor = Microsoft.UI.Colors.White;
+                return;
             }
-            else
-            {
-                tb.BackgroundColor = null;
-                tb.InactiveBackgroundColor = null;
-                tb.ForegroundColor = null;
-                tb.InactiveForegroundColor = null;
-                tb.ButtonBackgroundColor = null;
-                tb.ButtonInactiveBackgroundColor = null;
-                tb.ButtonForegroundColor = null;
-                tb.ButtonInactiveForegroundColor = null;
-                tb.ButtonHoverBackgroundColor = null;
-                tb.ButtonHoverForegroundColor = null;
-            }
+
+            var dark = RootGrid.ActualTheme == ElementTheme.Dark;
+            var fg = dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
+            var fgDim = dark ? Microsoft.UI.Colors.Gray : Microsoft.UI.Colors.DimGray;
+            tb.BackgroundColor = null;
+            tb.InactiveBackgroundColor = null;
+            tb.ForegroundColor = null;
+            tb.InactiveForegroundColor = null;
+            tb.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
+            tb.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
+            tb.ButtonForegroundColor = fg;
+            tb.ButtonInactiveForegroundColor = fgDim;
+            tb.ButtonHoverForegroundColor = fg;
+            tb.ButtonPressedForegroundColor = fg;
+            tb.ButtonHoverBackgroundColor = dark
+                ? Microsoft.UI.Colors.DimGray
+                : Windows.UI.Color.FromArgb(0xFF, 0xE5, 0xE5, 0xE5);
+            tb.ButtonPressedBackgroundColor = dark
+                ? Microsoft.UI.Colors.Gray
+                : Windows.UI.Color.FromArgb(0xFF, 0xCC, 0xCC, 0xCC);
         }
         catch
         {
@@ -173,7 +193,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-private void ApplyLocalization()
+    private void ApplyLocalization()
         {
             DispatcherQueue.TryEnqueue(() =>
             {
@@ -208,6 +228,29 @@ private void ApplyLocalization()
         catch
         {
         }
+    }
+
+    private void UpdateDownloadsButton()
+    {
+        try
+        {
+            var active = DownloadService.Instance.Jobs
+                .Where(j => j.State is DownloadState.Queued or DownloadState.Resolving or DownloadState.Downloading)
+                .ToList();
+            DownloadsFab.Visibility = active.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            if (active.Count == 0) return;
+            DownloadsCountText.Text = active.Count.ToString();
+            DownloadsRing.Value = active.Average(j => j.State == DownloadState.Downloading ? j.Progress : 0);
+            ToolTipService.SetToolTip(DownloadsFab, $"{Loc.Get("Downloads.Title")} ({active.Count})");
+        }
+        catch
+        {
+        }
+    }
+
+    private async void DownloadsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await Views.DownloadDialog.ShowActiveAsync(ContentFrame.XamlRoot);
     }
 
 private void ContentFrame_Navigated(object sender, NavigationEventArgs e)

@@ -1,4 +1,5 @@
 using HDREZKA.App.Services;
+using HDREZKA.Core.Api;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -19,6 +20,7 @@ public sealed partial class AccountPage : Page
         ApplyLocalization();
         LocalizationService.Instance.LanguageChanged += OnLanguageChanged;
         UpdateAccountState();
+        RenderOffline();
         RezkaService.Instance.AuthStateChanged += OnAuthStateChanged;
     }
 
@@ -45,9 +47,14 @@ public sealed partial class AccountPage : Page
         RegisterLink.Content = Loc.Get("Account.Register");
         PremiumLink.Content = Loc.Get("Account.Premium");
         PremiumLinkLoggedIn.Content = Loc.Get("Account.Premium");
+        SuggestLinkLoggedOut.Content = Loc.Get("Search.Suggest");
+        SuggestButton.Content = Loc.Get("Search.Suggest");
         BookmarksButton.Content = Loc.Get("Account.Bookmarks");
         HistoryButton.Content = Loc.Get("Nav.Continue");
         LogoutButton.Content = Loc.Get("Common.Logout");
+        OfflineHeader.Text = Loc.Get("Account.Offline");
+        OfflineEmptyText.Text = Loc.Get("Account.OfflineEmpty");
+        OfflineFolderButton.Content = Loc.Get("Downloads.OpenFolder");
         DisclaimerText.Text = Loc.Get("Settings.Disclaimer");
     }
 
@@ -126,6 +133,11 @@ public sealed partial class AccountPage : Page
         await SiteLinks.OpenAsync(SiteLinks.PaymentsUri);
     }
 
+    private async void SuggestLink_Click(object sender, RoutedEventArgs e)
+    {
+        await SupportRequest.ShowAsync(Content.XamlRoot, "");
+    }
+
     private void BookmarksButton_Click(object sender, RoutedEventArgs e)
     {
         Nav.Go<BookmarksPage>();
@@ -140,5 +152,98 @@ public sealed partial class AccountPage : Page
     {
         await RezkaService.Instance.LogoutAsync();
         UpdateAccountState();
+    }
+
+    private sealed record OfflineRow(string Title, string Details, string Path);
+
+    private void RenderOffline()
+    {
+        // Offline section exists only for unlocked users.
+        if (!DonorUnlock.IsUnlocked)
+        {
+            OfflinePanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        OfflinePanel.Visibility = Visibility.Visible;
+        var rows = new List<OfflineRow>();
+        try
+        {
+            var folder = DownloadService.DownloadFolder;
+            if (Directory.Exists(folder))
+            {
+                foreach (var file in new DirectoryInfo(folder)
+                             .GetFiles("*.mp4", SearchOption.AllDirectories)
+                             .OrderByDescending(f => f.LastWriteTimeUtc)
+                             .Take(100))
+                {
+                    var mb = file.Length / 1048576.0;
+                    rows.Add(new OfflineRow(
+                        Path.GetFileNameWithoutExtension(file.Name),
+                        $"{mb:0} MB · {file.LastWriteTime:dd.MM.yyyy}",
+                        file.FullName));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+
+        OfflineList.ItemsSource = rows;
+        OfflineList.Visibility = rows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        OfflineEmptyText.Visibility = rows.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void OfflineList_ItemClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is not OfflineRow row) return;
+        try
+        {
+            var id = "local:" + row.Path;
+            var details = new MovieDetailed
+            {
+                Id = id,
+                Name = row.Title,
+                Favs = "1",
+            };
+            var voice = new MovieVoiceActing(
+                Loc.Get("Common.Quality"), "0", "0", "", "", "", false, true, null);
+            var playerWindow = new PlayerWindow();
+            playerWindow.ShowPlayer(new PlayerLaunch(details, voice, null, null, null, row.Path));
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+    }
+
+    private void OfflineDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.Tag is not OfflineRow row) return;
+        try
+        {
+            if (File.Exists(row.Path)) File.Delete(row.Path);
+            PositionService.Instance.Remove("local:" + row.Path);
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+
+        RenderOffline();
+    }
+
+    private async void OfflineFolderButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var folder = await Windows.Storage.StorageFolder.GetFolderFromPathAsync(DownloadService.DownloadFolder);
+            await Windows.System.Launcher.LaunchFolderAsync(folder);
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
     }
 }
