@@ -403,8 +403,7 @@ public sealed partial class HomePage : Page
             var client = RezkaService.Instance.Client;
             var details = await client.GetDetailsAsync(item.Id);
             var voice = details.VoiceActings?.FirstOrDefault(v => v.TranslatorId == item.TranslatorKey)
-                ?? details.VoiceActings?.FirstOrDefault(v => v.IsSelected)
-                ?? details.VoiceActings?.FirstOrDefault();
+                ?? DetailsPage.PickDefaultVoice(details.VoiceActings);
             if (voice == null || !details.IsAvailable || details.IsComingSoon)
             {
                 GoToDetails(item);

@@ -43,7 +43,14 @@ public sealed partial class BookmarksPage : Page
         ShowState(true, Loc.Get("Common.Loading"));
         try
         {
-            _categories = (await RezkaService.Instance.Client.GetBookmarkCategoriesAsync()).ToList();
+            if (SettingsService.Instance.UseLocalBookmarks)
+            {
+                _categories = LocalBookmarkService.Instance.GetCategories().ToList();
+            }
+            else
+            {
+                _categories = (await RezkaService.Instance.Client.GetBookmarkCategoriesAsync()).ToList();
+            }
             CategoriesPanel.Children.Clear();
             foreach (var category in _categories)
             {
@@ -116,7 +123,14 @@ public sealed partial class BookmarksPage : Page
 
         try
         {
-            await RezkaService.Instance.Client.CreateBookmarkCategoryAsync(name);
+            if (SettingsService.Instance.UseLocalBookmarks)
+            {
+                LocalBookmarkService.Instance.AddCategory(name);
+            }
+            else
+            {
+                await RezkaService.Instance.Client.CreateBookmarkCategoryAsync(name);
+            }
             await LoadCategoriesAsync(selectName: name);
         }
         catch (RezkaException ex)
@@ -142,7 +156,14 @@ public sealed partial class BookmarksPage : Page
 
         try
         {
-            await RezkaService.Instance.Client.DeleteBookmarkCategoryAsync(category.Id);
+            if (SettingsService.Instance.UseLocalBookmarks)
+            {
+                LocalBookmarkService.Instance.DeleteCategory(category.Id);
+            }
+            else
+            {
+                await RezkaService.Instance.Client.DeleteBookmarkCategoryAsync(category.Id);
+            }
             if (_category?.Id == category.Id) _category = null;
             await LoadCategoriesAsync();
         }
@@ -189,12 +210,24 @@ public sealed partial class BookmarksPage : Page
 
         try
         {
-            var (_, items) = await RezkaService.Instance.Client.GetBookmarksAsync(_category.Id, ListFilter.Latest, 0, _page);
-            _items.AddRange(items);
-            ItemsGrid.ItemsSource = _items.ToList();
-            _hasMore = items.Count > 0;
-            ShowState(_items.Count == 0 && !_hasMore, _items.Count == 0 ? Loc.Get("Common.Empty") : "");
-            MoreButton.Visibility = _hasMore && _items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            if (SettingsService.Instance.UseLocalBookmarks)
+            {
+                var items = LocalBookmarkService.Instance.GetItems(_category.Id);
+                _items.AddRange(items);
+                ItemsGrid.ItemsSource = _items.ToList();
+                _hasMore = false;
+                ShowState(_items.Count == 0, _items.Count == 0 ? Loc.Get("Common.Empty") : "");
+                MoreButton.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                var (_, items) = await RezkaService.Instance.Client.GetBookmarksAsync(_category.Id, ListFilter.Latest, 0, _page);
+                _items.AddRange(items);
+                ItemsGrid.ItemsSource = _items.ToList();
+                _hasMore = items.Count > 0;
+                ShowState(_items.Count == 0 && !_hasMore, _items.Count == 0 ? Loc.Get("Common.Empty") : "");
+                MoreButton.Visibility = _hasMore && _items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
         catch (RezkaException ex)
         {

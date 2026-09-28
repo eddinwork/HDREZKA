@@ -32,6 +32,8 @@ public sealed class SettingsService
     public AppTheme Theme { get; set; } = AppTheme.System;
     public string DefaultQuality { get; set; } = "1080p";
     public bool UseAndroidHeaders { get; set; } = true;
+    public bool UseLocalBookmarks { get; set; } = false;
+    public bool UseLocalContinue { get; set; } = false;
     public int Volume { get; set; } = 100;
     public double Speed { get; set; } = 1.0;
 
@@ -132,6 +134,8 @@ public sealed class SettingsService
             Theme = loaded.Theme;
             DefaultQuality = loaded.DefaultQuality;
             UseAndroidHeaders = loaded.UseAndroidHeaders;
+            UseLocalBookmarks = loaded.UseLocalBookmarks;
+            UseLocalContinue = loaded.UseLocalContinue;
             Volume = loaded.Volume;
             Speed = loaded.Speed is > 0 and <= 4 ? loaded.Speed : 1.0;
             PosterSize = loaded.PosterSize is >= 80 and <= 256 ? loaded.PosterSize : 132;

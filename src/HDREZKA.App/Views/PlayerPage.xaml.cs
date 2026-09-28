@@ -390,7 +390,14 @@ public sealed partial class PlayerPage : Page
             MediaSource source;
             if (streamUrl.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase))
             {
-                var hls = await AdaptiveMediaSource.CreateFromUriAsync(new Uri(streamUrl));
+                var httpFilter = new Windows.Web.Http.Filters.HttpBaseProtocolFilter();
+                var httpClient = new Windows.Web.Http.HttpClient(httpFilter);
+                var mirrorUri = new Uri(SettingsService.Instance.Mirror.TrimEnd('/') + "/");
+                httpClient.DefaultRequestHeaders.Referer = mirrorUri;
+                httpClient.DefaultRequestHeaders.UserAgent.TryParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+                httpClient.DefaultRequestHeaders.Add("Origin", mirrorUri.GetLeftPart(UriPartial.Authority));
+
+                var hls = await AdaptiveMediaSource.CreateFromUriAsync(new Uri(streamUrl), httpClient);
                 if (hls.Status != AdaptiveMediaSourceCreationStatus.Success || hls.MediaSource == null)
                 {
                     throw new RezkaException(RezkaError.Parse, "HLS failed: " + hls.Status);

@@ -161,6 +161,13 @@ public sealed partial class ContinueWatchingPage : Page
 
     private async void LoadFromAccount()
     {
+        if (SettingsService.Instance.UseLocalContinue)
+        {
+            _accountFaulted = false;
+            LoadingRing.IsActive = false;
+            return;
+        }
+
         var client = RezkaService.Instance.Client;
         if (!RezkaService.Instance.IsLoggedIn)
         {
@@ -256,9 +263,11 @@ public sealed partial class ContinueWatchingPage : Page
             Data = item,
             Margin = new Thickness(0, 0, 18, 26),
             IsHitTestVisible = true,
+            PlayDirectly = SettingsService.Instance.PlayFromHomeDirectly,
         };
         card.DeleteRequested += OnDeleteRequested;
         card.WatchedToggled += OnWatchedToggled;
+        card.PlayRequested += OnPlayRequested;
         return card;
     }
 
@@ -327,6 +336,10 @@ public sealed partial class ContinueWatchingPage : Page
         _items.Remove(item);
         _accountIds.Remove(item.Id);
         PositionService.Instance.Remove(item.Id);
+        if (item.MovieKey != null)
+        {
+            PositionService.Instance.Remove(item.MovieKey);
+        }
         RenderList();
 
         // Best-effort server removal for account entries.
@@ -346,6 +359,66 @@ public sealed partial class ContinueWatchingPage : Page
                 XamlRoot = Content.XamlRoot,
             };
             await dialog.ShowAsync();
+        }
+    }
+
+    private static void GoToDetails(ContinueItem item)
+    {
+        Nav.Go<DetailsPage>(new MovieSimple(Id: item.Id, Name: item.Title, Poster: item.Poster));
+    }
+
+    private async void OnPlayRequested(object? sender, ContinueItem item)
+    {
+        if (sender is ContinueCard card) card.IsEnabled = false;
+        try
+        {
+            if (item.MovieKey == null || item.TranslatorKey == null)
+            {
+                GoToDetails(item);
+                return;
+            }
+
+            var client = RezkaService.Instance.Client;
+            var details = await client.GetDetailsAsync(item.Id);
+            var voice = details.VoiceActings?.FirstOrDefault(v => v.TranslatorId == item.TranslatorKey)
+                ?? DetailsPage.PickDefaultVoice(details.VoiceActings);
+            if (voice == null || !details.IsAvailable || details.IsComingSoon)
+            {
+                GoToDetails(item);
+                return;
+            }
+
+            IReadOnlyList<MovieSeason>? seasons = details.Seasons;
+            if (voice.Url == null && seasons == null)
+            {
+                var numeric = ExtractNumericId(details.Id);
+                if (numeric == null)
+                {
+                    GoToDetails(item);
+                    return;
+                }
+
+                seasons = await client.GetSeriesSeasonsAsync(numeric, voice, details.Favs);
+            }
+
+            var season = seasons?.FirstOrDefault(s => s.SeasonId == item.SeasonKey)
+                ?? seasons?.FirstOrDefault(s => s.IsSelected)
+                ?? seasons?.FirstOrDefault();
+            var episode = season?.Episodes.FirstOrDefault(e => e.EpisodeId == item.EpisodeKey)
+                ?? season?.Episodes.FirstOrDefault(e => e.IsSelected)
+                ?? season?.Episodes.FirstOrDefault();
+
+            var playerWindow = new PlayerWindow();
+            playerWindow.ShowPlayer(new PlayerLaunch(details, voice, seasons, season, episode));
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+            GoToDetails(item);
+        }
+        finally
+        {
+            if (sender is ContinueCard card2) card2.IsEnabled = true;
         }
     }
 

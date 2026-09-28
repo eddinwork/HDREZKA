@@ -28,6 +28,12 @@
                     <TextBlock x:Name="HeadersHeader" FontWeight="SemiBold" Margin="0,12,0,0"/>
                     <ToggleSwitch x:Name="HeadersToggle" Toggled="HeadersToggle_Toggled"/>
                     <TextBlock x:Name="HeadersHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock x:Name="LocalBookmarksHeader" FontWeight="SemiBold" Margin="0,12,0,0"/>
+                    <ToggleSwitch x:Name="LocalBookmarksToggle" Toggled="LocalBookmarksToggle_Toggled"/>
+                    <TextBlock x:Name="LocalBookmarksHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock x:Name="LocalContinueHeader" FontWeight="SemiBold" Margin="0,12,0,0"/>
+                    <ToggleSwitch x:Name="LocalContinueToggle" Toggled="LocalContinueToggle_Toggled"/>
+                    <TextBlock x:Name="LocalContinueHint" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>
             </Expander>
 

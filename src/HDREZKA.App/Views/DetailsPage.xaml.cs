@@ -133,9 +133,43 @@ public sealed partial class DetailsPage : Page
         }
     }
 
-    private Task LoadDetailsAsync(MovieDetailed details)
+    private async Task LoadDetailsAsync(MovieDetailed details)
     {
         _details = details;
+
+        // Auto-select preferred voice (e.g. non-premium when not logged in or previously saved)
+        _voice = PickDefaultVoice(details.VoiceActings);
+
+        // If the selected voice differs from the page's default voice (whose seasons/episodes
+        // are initially populated in details.Seasons), fetch the correct seasons for this voice:
+        var defaultVoice = details.VoiceActings?.FirstOrDefault(v => v.IsSelected) ?? details.VoiceActings?.FirstOrDefault();
+        if (_voice != null && defaultVoice != null && _voice.TranslatorId != defaultVoice.TranslatorId)
+        {
+            var numericId = ExtractNumericId(details.Id);
+            if (numericId != null)
+            {
+                try
+                {
+                    _seasons = await RezkaService.Instance.Client.GetSeriesSeasonsAsync(numericId, _voice, details.Favs);
+                }
+                catch
+                {
+                    _seasons = details.Seasons;
+                }
+            }
+            else
+            {
+                _seasons = details.Seasons;
+            }
+        }
+        else
+        {
+            _seasons = details.Seasons;
+        }
+
+        _season = _seasons?.FirstOrDefault(s => s.IsSelected) ?? _seasons?.FirstOrDefault();
+        _episode = _season?.Episodes.FirstOrDefault(ep => ep.IsSelected) ?? _season?.Episodes.FirstOrDefault();
+
         DispatcherQueue.TryEnqueue(() =>
         {
             LoadingPanel.Visibility = Visibility.Collapsed;
@@ -143,7 +177,6 @@ public sealed partial class DetailsPage : Page
             MainPanel.Visibility = Visibility.Visible;
             Render(details);
         });
-        return Task.CompletedTask;
     }
 
     private void Render(MovieDetailed details)
@@ -156,6 +189,12 @@ public sealed partial class DetailsPage : Page
         }
 
         DescriptionText.Text = details.Description ?? "";
+        if (SettingsService.Instance.UseLocalBookmarks)
+        {
+            BookmarkText.Text = LocalBookmarkService.Instance.IsBookmarked(details.Id)
+                ? Loc.Get("Common.RemoveFromBookmarks")
+                : Loc.Get("Common.AddToBookmarks");
+        }
         RatingsPanel.Children.Clear();
         AddRating("Rezka", details.SiteRating);
         AddRating("IMDb", details.ImdbRating);
@@ -184,10 +223,17 @@ public sealed partial class DetailsPage : Page
             }
         }
 
-        _seasons = details.Seasons;
-        _voice = details.VoiceActings?.FirstOrDefault(v => v.IsSelected) ?? details.VoiceActings?.FirstOrDefault();
-        _season = _seasons?.FirstOrDefault(s => s.IsSelected) ?? _seasons?.FirstOrDefault();
-        _episode = _season?.Episodes.FirstOrDefault(ep => ep.IsSelected) ?? _season?.Episodes.FirstOrDefault();
+        _voice ??= PickDefaultVoice(details.VoiceActings);
+        if (_voice != null)
+        {
+            foreach (var child in VoicesList.Children.OfType<ToggleButton>())
+            {
+                child.IsChecked = ReferenceEquals(child.Tag, _voice) || (child.Tag is MovieVoiceActing va && va.TranslatorId == _voice.TranslatorId);
+            }
+        }
+        _seasons ??= details.Seasons;
+        _season ??= _seasons?.FirstOrDefault(s => s.IsSelected) ?? _seasons?.FirstOrDefault();
+        _episode ??= _season?.Episodes.FirstOrDefault(ep => ep.IsSelected) ?? _season?.Episodes.FirstOrDefault();
 
         RenderSeasons();
 
@@ -609,11 +655,19 @@ public sealed partial class DetailsPage : Page
         _season = null;
         _episode = null;
 
+        // If voice points to another page URL, reload details from that URL
+        if (!string.IsNullOrEmpty(voice.Url))
+        {
+            var movie = new MovieSimple(voice.Url, voice.Name, null, _details.Poster, null, null);
+            await LoadAsync(movie);
+            return;
+        }
+
         // reload seasons for this voice if needed
         try
         {
             var numericId = ExtractNumericId(_details.Id);
-            if (numericId != null && voice.Url == null && _details.Seasons == null)
+            if (numericId != null && (_details.Seasons != null || _seasons != null || _details.TypeId == "0"))
             {
                 _seasons = await RezkaService.Instance.Client.GetSeriesSeasonsAsync(numericId, voice, _details.Favs);
             }
@@ -629,6 +683,8 @@ public sealed partial class DetailsPage : Page
         catch (RezkaException)
         {
             _seasons = _details.Seasons;
+            _season = _seasons?.FirstOrDefault();
+            _episode = _season?.Episodes.FirstOrDefault();
             RenderSeasons();
         }
 
@@ -726,6 +782,36 @@ public sealed partial class DetailsPage : Page
     private async void BookmarkButton_Click(object sender, RoutedEventArgs e)
     {
         if (_details == null) return;
+
+        if (SettingsService.Instance.UseLocalBookmarks)
+        {
+            var isBookmarked = LocalBookmarkService.Instance.IsBookmarked(_details.Id);
+            if (isBookmarked)
+            {
+                LocalBookmarkService.Instance.RemoveBookmark(_details.Id);
+                BookmarkText.Text = Loc.Get("Common.AddToBookmarks");
+                return;
+            }
+
+            var categories = LocalBookmarkService.Instance.GetCategories();
+            var menu = new MenuFlyout();
+            foreach (var category in categories)
+            {
+                var item = new MenuFlyoutItem
+                {
+                    Text = category.Name,
+                    Tag = category.Id,
+                };
+                item.Click += (_, _) =>
+                {
+                    LocalBookmarkService.Instance.AddBookmark(_details, category.Id);
+                    BookmarkText.Text = Loc.Get("Common.RemoveFromBookmarks");
+                };
+                menu.Items.Add(item);
+            }
+            menu.ShowAt(BookmarkButton, new Windows.Foundation.Point());
+            return;
+        }
 
         if (!RezkaService.Instance.IsLoggedIn)
         {
@@ -970,6 +1056,25 @@ public sealed partial class DetailsPage : Page
     private void RetryButton_Click(object sender, RoutedEventArgs e)
     {
         if (_movie != null) _ = LoadAsync(_movie);
+    }
+
+    internal static MovieVoiceActing? PickDefaultVoice(IReadOnlyList<MovieVoiceActing>? voices)
+    {
+        if (voices == null || voices.Count == 0) return null;
+
+        // If user is logged in to HDRezka, they might have access to premium voices,
+        // but even then, if IsSelected is set, prefer that.
+        // If not logged in, prefer the first non-premium voice:
+        if (!RezkaService.Instance.IsLoggedIn)
+        {
+            var selectedNonPrem = voices.FirstOrDefault(v => v.IsSelected && !v.IsPremium);
+            if (selectedNonPrem != null) return selectedNonPrem;
+
+            var firstNonPrem = voices.FirstOrDefault(v => !v.IsPremium);
+            if (firstNonPrem != null) return firstNonPrem;
+        }
+
+        return voices.FirstOrDefault(v => v.IsSelected) ?? voices.FirstOrDefault();
     }
 
     internal static string? ExtractNumericId(string cleanPath)
