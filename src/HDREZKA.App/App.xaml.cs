@@ -72,6 +72,9 @@ public partial class App : Application
         {
             try
             {
+                // The redirected event loses the URI for unpackaged apps,
+                // so leave it in a pending file for the main instance.
+                WritePendingProtocolUri();
                 await keyInstance.RedirectActivationToAsync(
                     Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs());
             }
@@ -118,7 +121,7 @@ public partial class App : Application
     private void OnAppInstanceActivated(object? sender, Microsoft.Windows.AppLifecycle.AppActivationArguments args)
     {
         try { TryLog(new Exception("[Protocol] redirected activation")); } catch { }
-        var path = GetProtocolDetailsPath(args);
+        var path = GetProtocolDetailsPath(args) ?? TakePendingProtocolUri();
         if (path == null || MainWindow == null) return;
         MainWindow.DispatcherQueue.TryEnqueue(() =>
         {
@@ -146,14 +149,63 @@ public partial class App : Application
         }
     }
 
+    private static string PendingProtocolPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "HDREZKA", "protocol-pending.txt");
+
+    private static void WritePendingProtocolUri()
+    {
+        try
+        {
+            var arg = Environment.GetCommandLineArgs()
+                .FirstOrDefault(a => a.StartsWith(
+                    Services.ProtocolService.Scheme + "://", StringComparison.OrdinalIgnoreCase));
+            if (string.IsNullOrEmpty(arg)) return;
+            Directory.CreateDirectory(Path.GetDirectoryName(PendingProtocolPath)!);
+            File.AppendAllLines(PendingProtocolPath, [arg.Trim().Trim('"')]);
+        }
+        catch (Exception ex)
+        {
+            TryLog(ex);
+        }
+    }
+
+    private static string? TakePendingProtocolUri()
+    {
+        try
+        {
+            if (!File.Exists(PendingProtocolPath)) return null;
+            var lines = File.ReadAllLines(PendingProtocolPath);
+            try { File.Delete(PendingProtocolPath); } catch { }
+            for (var i = lines.Length - 1; i >= 0; i--)
+            {
+                var line = lines[i];
+                if (Uri.TryCreate(line.Trim(), UriKind.Absolute, out var uri))
+                {
+                    var path = Services.ProtocolService.ParseDetailsPath(uri);
+                    if (path != null)
+                    {
+                        TryLog(new Exception($"[Protocol] pending uri={uri}"));
+                        return path;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            TryLog(ex);
+        }
+
+        return null;
+    }
+
     private static string? GetProtocolDetailsPath(Microsoft.Windows.AppLifecycle.AppActivationArguments args)
     {
         try
         {
             TryLog(new Exception($"[Protocol] kind={args.Kind}"));
-            // COM path: real protocol activation.
-            if (args.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Protocol &&
-                args.Data is Windows.ApplicationModel.Activation.ProtocolActivatedEventArgs proto)
+            // COM path (packaged) or interface-based activation.
+            if (args.Data is Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs proto)
             {
                 TryLog(new Exception($"[Protocol] uri={proto.Uri}"));
                 return Services.ProtocolService.ParseDetailsPath(proto.Uri);
@@ -161,22 +213,31 @@ public partial class App : Application
 
             // Unpackaged fallback: shell launches the exe with the URI as a
             // plain command-line argument, reported as a normal Launch.
-            if (args.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.Launch &&
-                args.Data is Windows.ApplicationModel.Activation.LaunchActivatedEventArgs launch)
+            // Scan both the activation args and the raw command line.
+            string? cmd = null;
+            try
             {
-                var cmd = launch.Arguments;
-                if (!string.IsNullOrEmpty(cmd))
+                if (args.Data is Windows.ApplicationModel.Activation.LaunchActivatedEventArgs launch)
                 {
-                    var start = cmd.IndexOf(Services.ProtocolService.Scheme + "://", StringComparison.OrdinalIgnoreCase);
-                    if (start >= 0)
+                    cmd = launch.Arguments;
+                }
+            }
+            catch
+            {
+            }
+
+            cmd ??= Environment.CommandLine;
+            if (!string.IsNullOrEmpty(cmd))
+            {
+                var start = cmd.IndexOf(Services.ProtocolService.Scheme + "://", StringComparison.OrdinalIgnoreCase);
+                if (start >= 0)
+                {
+                    var end = cmd.IndexOf('"', start);
+                    var raw = (end > start ? cmd.Substring(start, end - start) : cmd[start..]).Trim().Trim('"');
+                    if (Uri.TryCreate(raw, UriKind.Absolute, out var uri))
                     {
-                        var end = cmd.IndexOf('"', start);
-                        var raw = end > start ? cmd.Substring(start, end - start) : cmd[start..];
-                        if (Uri.TryCreate(raw.Trim(), UriKind.Absolute, out var uri))
-                        {
-                            TryLog(new Exception($"[Protocol] uri={uri}"));
-                            return Services.ProtocolService.ParseDetailsPath(uri);
-                        }
+                        TryLog(new Exception($"[Protocol] uri={uri}"));
+                        return Services.ProtocolService.ParseDetailsPath(uri);
                     }
                 }
             }

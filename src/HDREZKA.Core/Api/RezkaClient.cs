@@ -11,11 +11,12 @@ public sealed class RezkaClientOptions
     public string AndroidAppVersion { get; set; } = "2.2.2";
 }
 
-public sealed class RezkaClient
+public sealed class RezkaClient : IDisposable
 {
     private HttpClient _http;
     private readonly CookieContainer _cookies;
     private readonly SemaphoreSlim _requestGate = new(2, 2);
+    private bool _disposed;
 
     public RezkaClientOptions Options { get; private set; }
 
@@ -59,6 +60,14 @@ public sealed class RezkaClient
         }
 
         _http.DefaultRequestHeaders.UserAgent.ParseAdd(Options.UserAgent);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        try { _http.Dispose(); } catch { }
+        try { _requestGate.Dispose(); } catch { }
     }
 
     public void SetMirror(string mirror)
@@ -226,6 +235,71 @@ public sealed class RezkaClient
         try { HeadersFlipped?.Invoke(); } catch { }
     }
 
+    private static bool IsRedirect(HttpStatusCode code) =>
+        code is HttpStatusCode.MovedPermanently or HttpStatusCode.Redirect
+            or HttpStatusCode.RedirectMethod or HttpStatusCode.TemporaryRedirect
+            or (HttpStatusCode)308;
+
+    /// <summary>
+    /// Sends the request, manually following redirects left over by the
+    /// handler — notably https→http downgrades (person pages!), which
+    /// HttpClientHandler refuses to follow but browsers accept.
+    /// Returns the final response (caller disposes).
+    /// </summary>
+    private async Task<HttpResponseMessage> SendWithRedirectsAsync(
+        Func<HttpRequestMessage> createRequest, bool isPost, CancellationToken ct)
+    {
+        var method = isPost ? HttpMethod.Post : HttpMethod.Get;
+        Uri? nextUri = null;
+        HttpResponseMessage? resp = null;
+        try
+        {
+            for (var i = 0; i < 5; i++)
+            {
+                using var req = createRequest();
+                if (nextUri != null)
+                {
+                    req.RequestUri = nextUri;
+                    if (isPost && method == HttpMethod.Get)
+                    {
+                        // 301/302/303 convert POST to GET (standard).
+                        req.Method = HttpMethod.Get;
+                        req.Content?.Dispose();
+                        req.Content = null;
+                    }
+                    else
+                    {
+                        req.Method = method;
+                    }
+                }
+
+                // Effective URL (factory requests are mirror-relative).
+                var effective = req.RequestUri?.IsAbsoluteUri == true
+                    ? req.RequestUri
+                    : new Uri(new Uri(Options.Mirror), req.RequestUri?.OriginalString ?? string.Empty);
+
+                resp?.Dispose();
+                resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
+                if (!IsRedirect(resp.StatusCode) || resp.Headers.Location == null) return resp;
+
+                var location = resp.Headers.Location;
+                nextUri = location.IsAbsoluteUri ? location : new Uri(effective, location);
+                if (isPost && resp.StatusCode is HttpStatusCode.MovedPermanently
+                    or HttpStatusCode.Redirect or HttpStatusCode.RedirectMethod)
+                {
+                    method = HttpMethod.Get;
+                }
+            }
+
+            return resp!;
+        }
+        catch
+        {
+            resp?.Dispose();
+            throw;
+        }
+    }
+
     private async Task<string> GetStringAsync(string pathAndQuery, CancellationToken ct)
     {
         await _requestGate.WaitAsync(ct).ConfigureAwait(false);
@@ -236,7 +310,8 @@ public sealed class RezkaClient
             {
                 try
                 {
-                    using var resp = await _http.GetAsync(pathAndQuery, ct).ConfigureAwait(false);
+                    using var resp = await SendWithRedirectsAsync(
+                        () => new HttpRequestMessage(HttpMethod.Get, pathAndQuery), false, ct).ConfigureAwait(false);
                     if (resp.StatusCode == HttpStatusCode.Forbidden)
                     {
                         // Port of mac CustomInterceptor: one retry with flipped
@@ -294,9 +369,12 @@ public sealed class RezkaClient
             {
                 try
                 {
-                    using var content = new FormUrlEncodedContent(form.Where(kv => kv.Value != null)
-                        .Select(kv => new KeyValuePair<string, string>(kv.Key, kv.Value!)));
-                    using var resp = await _http.PostAsync(pathAndQuery, content, ct).ConfigureAwait(false);
+                    using var resp = await SendWithRedirectsAsync(
+                        () => new HttpRequestMessage(HttpMethod.Post, pathAndQuery)
+                        {
+                            Content = new FormUrlEncodedContent(form.Where(kv => kv.Value != null)
+                                .Select(kv => new KeyValuePair<string, string>(kv.Key, kv.Value!))),
+                        }, true, ct).ConfigureAwait(false);
                     if (resp.StatusCode == HttpStatusCode.Forbidden)
                     {
                         // Same 403-flip retry as GET (covers ajax/login/).

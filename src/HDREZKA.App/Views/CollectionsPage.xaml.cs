@@ -161,7 +161,7 @@ public sealed partial class CollectionsPage : Page
             {
                 Glyph = "\uE8B7",
                 FontSize = 40,
-                Foreground = (Microsoft.UI.Xaml.Media.Brush?)Application.Current.Resources["TextFillColorTertiaryBrush"],
+                Style = Application.Current.Resources["StarIdleIcon"] as Style,
                 HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center,
                 VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
             };
@@ -176,6 +176,7 @@ public sealed partial class CollectionsPage : Page
             FontSize = 12,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
             Margin = new Thickness(2, 6, 2, 0),
+            Style = Application.Current.Resources["PrimaryText"] as Style,
         };
 
         var card = new StackPanel { Width = width };
@@ -188,7 +189,7 @@ public sealed partial class CollectionsPage : Page
                 Text = col.Count.ToString(),
                 FontSize = 11,
                 Margin = new Thickness(2, 2, 2, 0),
-                Foreground = (Microsoft.UI.Xaml.Media.Brush?)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                Style = Application.Current.Resources["SecondaryText"] as Style,
             });
         }
 

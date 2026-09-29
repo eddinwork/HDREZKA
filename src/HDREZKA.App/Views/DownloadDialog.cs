@@ -113,11 +113,12 @@ public static class DownloadDialog
 
     private static async Task ShowInternalAsync(XamlRoot root, IReadOnlyList<DownloadJob>? batch)
     {
+        var list = new StackPanel { Spacing = 10, MinWidth = 340 };
         var folderText = new TextBlock
         {
             Text = $"{Loc.Get("Downloads.Folder")} {DownloadService.DownloadFolder}",
             FontSize = 12,
-            Foreground = Application.Current.Resources["TextFillColorSecondaryBrush"] as Microsoft.UI.Xaml.Media.Brush,
+            Style = Application.Current.Resources["SecondaryText"] as Style,
             TextWrapping = TextWrapping.Wrap,
         };
         var changeFolderButton = new Button { Content = Loc.Get("Downloads.Change") };
@@ -153,7 +154,6 @@ public static class DownloadDialog
         topRow.Children.Add(pauseButton);
         topRow.Children.Add(openFolderButton);
 
-        var list = new StackPanel { Spacing = 10, MinWidth = 340 };
         var content = new StackPanel { Spacing = 12 };
         content.Children.Add(folderText);
         content.Children.Add(topRow);
@@ -192,7 +192,7 @@ public static class DownloadDialog
                 {
                     Text = StatusText(job),
                     FontSize = 12,
-                    Foreground = Application.Current.Resources["TextFillColorSecondaryBrush"] as Microsoft.UI.Xaml.Media.Brush,
+                    Style = Application.Current.Resources["SecondaryText"] as Style,
                 };
                 row.Children.Add(bar);
                 row.Children.Add(status);

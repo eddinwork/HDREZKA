@@ -1,8 +1,9 @@
 {
-  "updated": "2026-09-20",
+  "updated": "2026-09-29",
   "mirrors": [
     { "url": "https://hdrzk.org/", "region": "ALL", "note": "default" },
     { "url": "https://rezka.ag/", "region": "ALL", "note": "main" },
+    { "url": "https://rezka.fi/", "region": "ALL", "note": "main alt domain" },
     { "url": "https://hdrezka.ag/", "region": "ALL", "note": "main alt" },
     { "url": "https://hdrezka.me/", "region": "ALL", "note": "alt" },
     { "url": "https://rezkify.com/", "region": "ALL", "note": "alt" },

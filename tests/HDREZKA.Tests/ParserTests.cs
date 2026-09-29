@@ -160,6 +160,61 @@ public class ParserTests
     }
 
     [Fact]
+    public void ParseDetails_BarePersonLinks_Works()
+    {
+        // Actors as plain anchors without .item wrappers (as on live pages).
+        var html = """
+            <html><body>
+            <div id="wrapper">
+            <div class="b-content__main">
+              <div class="b-post__title">Тестовый фильм</div>
+              <table class="b-post__info">
+                <tr><td class="l">В ролях:</td><td><a href="https://hdrzk.org/person/10-a.html">Актер Один</a>, <a href="https://hdrzk.org/person/11-b.html">Актер Два</a></td></tr>
+              </table>
+              <input type="hidden" id="ctrl_favs" value="f1">
+              <div id="comments-list-button">Комментарии <em>0</em></div>
+            </div>
+            </div></body></html>
+            """;
+
+        var details = Parsers.ParseDetails(html, "films/999-test.html");
+
+        Assert.NotNull(details.Actors);
+        Assert.Equal(2, details.Actors!.Count);
+        Assert.Equal("person/10-a.html", details.Actors![0].Id);
+        Assert.Equal("Актер Один", details.Actors![0].Name);
+        Assert.Null(details.Producers);
+    }
+
+    [Fact]
+    public void ParseDetails_ColspanCast_Works()
+    {
+        // Full-width cast row (single td) + cast outside the info table.
+        var html = """
+            <html><body>
+            <div id="wrapper">
+            <div class="b-content__main">
+              <div class="b-post__title">Тестовый фильм</div>
+              <table class="b-post__info">
+                <tr><td class="l">Год:</td><td>2024</td></tr>
+                <tr><td colspan="2"><div class="item"><a href="https://hdrzk.org/person/20-c.html">Актер Три</a></div></td></tr>
+              </table>
+              <div class="cast-extra"><a href="https://hdrzk.org/person/21-d.html">Актер Четыре</a></div>
+              <input type="hidden" id="ctrl_favs" value="f1">
+              <div id="comments-list-button">Комментарии <em>0</em></div>
+            </div>
+            </div></body></html>
+            """;
+
+        var details = Parsers.ParseDetails(html, "films/999-test.html");
+
+        Assert.NotNull(details.Actors);
+        Assert.Equal(2, details.Actors!.Count);
+        Assert.Equal("person/20-c.html", details.Actors![0].Id);
+        Assert.Equal("person/21-d.html", details.Actors![1].Id);
+    }
+
+    [Fact]
     public void ParsePerson_Works()
     {
         var html = """

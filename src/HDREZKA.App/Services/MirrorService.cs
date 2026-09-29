@@ -23,6 +23,7 @@ public static class MirrorService
     [
         "https://hdrzk.org/",
         "https://rezka.ag/",
+        "https://rezka.fi/",
         "https://hdrezka.ag/",
         "https://hdrezka.me/",
         "https://rezkify.com/",

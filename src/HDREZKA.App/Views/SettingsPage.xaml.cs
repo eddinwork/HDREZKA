@@ -62,7 +62,7 @@ public sealed partial class SettingsPage : Page
         DirectPlayCheck.IsChecked = settings.PlayFromHomeDirectly;
         DonorBox.Text = settings.DonorCode;
         SeriesToggle.IsOn = settings.SeriesUpdatesEnabled;
-        VersionText.Text = $"HDREZKA for Windows · {UpdateService.CurrentVersion} (20.09.2026)";
+        VersionText.Text = $"HDREZKA for Windows · {UpdateService.CurrentVersion}";
 
         DonateAddressText.Text = DonateAddress;
         try

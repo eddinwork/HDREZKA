@@ -52,6 +52,7 @@ public sealed partial class PersonPage : Page
     private void ApplyLocalization()
     {
         RetryButton.Content = Loc.Get("Common.Retry");
+        MirrorButton.Content = Loc.Get("Settings.AutoMirror");
     }
 
     internal static string RoleName(string roleId) => roleId switch
@@ -76,7 +77,7 @@ public sealed partial class PersonPage : Page
 
         try
         {
-            var details = await RezkaService.Instance.Client.GetPersonAsync(person.Id);
+            var details = await RezkaService.Instance.GetPersonAsync(person.Id);
             LoadDetails(details);
         }
         catch (RezkaException ex)
@@ -85,6 +86,10 @@ public sealed partial class PersonPage : Page
             LoadingPanel.Visibility = Visibility.Collapsed;
             ErrorPanel.Visibility = Visibility.Visible;
             ErrorText.Text = RezkaService.Instance.ErrorText(ex);
+            MirrorButton.Content = Loc.Get("Settings.AutoMirror");
+            MirrorButton.Visibility = ex.Kind is RezkaError.Network or RezkaError.AccessDenied or RezkaError.MirrorBanned
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         }
     }
 
@@ -117,19 +122,14 @@ public sealed partial class PersonPage : Page
         FilmographyPanel.Children.Clear();
         if (details.Filmography != null)
         {
+            var first = true;
             foreach (var group in details.Filmography)
             {
-                var header = new TextBlock
-                {
-                    Text = RoleName(group.RoleId),
-                    Style = Application.Current.Resources["SectionHeader"] as Style,
-                };
-                FilmographyPanel.Children.Add(header);
-
                 var list = new ListView
                 {
                     SelectionMode = ListViewSelectionMode.None,
                     IsItemClickEnabled = true,
+                    MaxHeight = 480,
                 };
                 list.ItemClick += (_, e) =>
                 {
@@ -142,7 +142,17 @@ public sealed partial class PersonPage : Page
                 list.ItemsSource = group.Movies
                     .Select(m => new FilmRow(m.Name ?? "", m.Details, m.Poster, m))
                     .ToList();
-                FilmographyPanel.Children.Add(list);
+
+                var expander = new Expander
+                {
+                    Header = $"{RoleName(group.RoleId)} ({group.Movies.Count})",
+                    Content = list,
+                    IsExpanded = first,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                };
+                first = false;
+                FilmographyPanel.Children.Add(expander);
             }
         }
     }
@@ -177,5 +187,24 @@ public sealed partial class PersonPage : Page
     private void RetryButton_Click(object sender, RoutedEventArgs e)
     {
         if (_person != null) _ = LoadAsync(_person);
+    }
+
+    private async void MirrorButton_Click(object sender, RoutedEventArgs e)
+    {
+        MirrorButton.IsEnabled = false;
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            var applied = await MirrorService.PickAndApplyAsync(Content.XamlRoot, DispatcherQueue, cts.Token);
+            if (applied != null && _person != null) await LoadAsync(_person);
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+        finally
+        {
+            MirrorButton.IsEnabled = true;
+        }
     }
 }

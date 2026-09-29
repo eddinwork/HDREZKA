@@ -27,7 +27,11 @@
 
     <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel x:Name="MainPanel" Padding="36,16,36,24" Spacing="16" MaxWidth="1200" HorizontalAlignment="Left">
+            <Grid x:Name="MainPanel" Padding="36,16,36,24" RowSpacing="16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
                 <Grid ColumnSpacing="28">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -45,8 +49,8 @@
                     </StackPanel>
                 </Grid>
 
-                <StackPanel x:Name="FilmographyPanel" Spacing="12"/>
-            </StackPanel>
+                <StackPanel x:Name="FilmographyPanel" Grid.Row="1" Spacing="12"/>
+            </Grid>
         </ScrollViewer>
 
         <StackPanel x:Name="LoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
@@ -56,7 +60,10 @@
         <StackPanel x:Name="ErrorPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Visibility="Collapsed">
             <FontIcon Glyph="&#xE783;" FontSize="36"/>
             <TextBlock x:Name="ErrorText" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"/>
-            <Button x:Name="RetryButton" Click="RetryButton_Click" HorizontalAlignment="Center" Style="{ThemeResource AccentButtonStyle}"/>
+            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                <Button x:Name="RetryButton" Click="RetryButton_Click" Style="{ThemeResource AccentButtonStyle}"/>
+                <Button x:Name="MirrorButton" Click="MirrorButton_Click" Visibility="Collapsed"/>
+            </StackPanel>
         </StackPanel>
     </Grid>
 </Page>

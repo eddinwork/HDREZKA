@@ -236,6 +236,13 @@ public static class Parsers
             foreach (var tr in info.QuerySelectorAll("tr"))
             {
                 var tds = tr.Children.Where(c => c.TagName.Equals("TD", StringComparison.OrdinalIgnoreCase)).ToList();
+                if (tds.Count == 1)
+                {
+                    // Full-width row (e.g. colspan cast list): harvest persons as actors.
+                    actors = MergePersons(actors, ParsePersons(tds[0]));
+                    continue;
+                }
+
                 for (var i = 0; i + 1 < tds.Count; i += 2)
                 {
                     var labelEl = tds[i];
@@ -289,6 +296,27 @@ public static class Parsers
                     }
                 }
             }
+        }
+
+        // Last resort: cast rendered outside the info table (or table scan
+        // missed it) — harvest person links from the whole content block,
+        // excluding already-known directors and cast.
+        {
+            var known = new HashSet<string>(
+                (producers ?? []).Select(p => p.Id), StringComparer.OrdinalIgnoreCase);
+            foreach (var a in actors ?? []) known.Add(a.Id);
+            var found = new List<PersonSimple>();
+            foreach (var a in content.QuerySelectorAll("a"))
+            {
+                var href = CleanPath(a.GetAttribute("href"));
+                if (href == null || !href.Contains("person/")) continue;
+                if (!known.Add(href)) continue;
+                var personName = Text(a);
+                if (personName.Length == 0) continue;
+                found.Add(new PersonSimple(href, personName, null));
+            }
+
+            if (found.Count > 0) actors = MergePersons(actors, found);
         }
 
         var typeId = doc.QuerySelector("#type_id")?.GetAttribute("value");
@@ -373,6 +401,22 @@ public static class Parsers
             if (href == null) continue;
             var photo = item.QuerySelector(".person-name-item")?.GetAttribute("data-photo");
             result.Add(new PersonSimple(href, Text(a), photo == "null" ? null : photo));
+        }
+
+        // Actors are often bare links without .item wrappers: any anchor
+        // pointing at a person page counts (deduped by MergePersons upstream).
+        // NOTE: CleanPath() strips the leading slash, so match "person/".
+        if (result.Count == 0)
+        {
+            foreach (var a in valueEl.QuerySelectorAll("a"))
+            {
+                var href = CleanPath(a.GetAttribute("href"));
+                if (href == null || !href.Contains("person/")) continue;
+                var name = Text(a);
+                if (name.Length == 0) continue;
+                if (result.Any(p => p.Id == href)) continue;
+                result.Add(new PersonSimple(href, name, null));
+            }
         }
 
         return result;

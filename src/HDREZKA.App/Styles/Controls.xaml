@@ -95,6 +95,51 @@
     <Style x:Key="DetailsValue" TargetType="TextBlock">
         <Setter Property="TextWrapping" Value="Wrap"/>
         <Setter Property="Margin" Value="0,6,0,0"/>
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}"/>
+    </Style>
+
+    <!-- Code-created texts: Foreground MUST come from these styles, never
+         from Application.Current.Resources (wrong theme context). -->
+    <Style x:Key="PrimaryText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}"/>
+    </Style>
+
+    <Style x:Key="SecondaryText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}"/>
+    </Style>
+
+    <Style x:Key="TertiaryText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorTertiaryBrush}"/>
+    </Style>
+
+    <Style x:Key="RatingCardBorder" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="Padding" Value="12,6,12,6"/>
+    </Style>
+
+    <Style x:Key="CommentCardBorder" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="Padding" Value="12,8,12,8"/>
+    </Style>
+
+    <Style x:Key="AdminBadgeBorder" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource AccentFillColorDefaultBrush}"/>
+        <Setter Property="CornerRadius" Value="4"/>
+        <Setter Property="Padding" Value="6,1,6,1"/>
+    </Style>
+
+    <Style x:Key="StarActiveIcon" TargetType="FontIcon">
+        <Setter Property="Foreground" Value="{ThemeResource SystemFillColorAttentionBrush}"/>
+    </Style>
+
+    <Style x:Key="StarIdleIcon" TargetType="FontIcon">
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorTertiaryBrush}"/>
     </Style>
 
     <Style x:Key="PlayerSlider" TargetType="Slider">

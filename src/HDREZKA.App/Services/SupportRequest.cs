@@ -31,7 +31,6 @@ public static class SupportRequest
             TextWrapping = TextWrapping.Wrap,
             MaxWidth = 380,
             FontSize = 12,
-            Foreground = Application.Current.Resources["TextFillColorSecondaryBrush"] as Microsoft.UI.Xaml.Media.Brush,
         };
         var panel = new StackPanel { Spacing = 10 };
         panel.Children.Add(input);

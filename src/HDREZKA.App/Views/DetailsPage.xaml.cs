@@ -111,6 +111,7 @@ public sealed partial class DetailsPage : Page
         if (_details != null) RenderSchedule(_details);
         VoicesHeader.Text = Loc.Get("Common.VoiceActing");
         SeasonsHeader.Text = Loc.Get("Common.Season");
+        WatchAlsoHeader.Text = Loc.Get("Details.WatchAlso");
         RetryButton.Content = Loc.Get("Common.Retry");
         CommentInput.PlaceholderText = Loc.Get("Comments.Placeholder");
         CommentSendButton.Content = Loc.Get("Common.Send");
@@ -213,7 +214,25 @@ public sealed partial class DetailsPage : Page
         UpdateTrackButton();
         UpdateVoicesRatingButton(details);
         RenderSchedule(details);
+        RenderWatchAlso(details);
         try { App.TryLog(new Exception("[Details] Rendered " + details.Id)); } catch { }
+    }
+
+    private void RenderWatchAlso(MovieDetailed details)
+    {
+        // Virtualized horizontal GridView (like catalog rows), NOT a manual
+        // StackPanel of cards — that pattern once correlated with a native
+        // crash on this page. Breadcrumbs will tell if it ever returns.
+        var items = details.WatchAlso;
+        if (items == null || items.Count == 0)
+        {
+            WatchAlsoPanel.Visibility = Visibility.Collapsed;
+            WatchAlsoGrid.ItemsSource = null;
+            return;
+        }
+
+        WatchAlsoPanel.Visibility = Visibility.Visible;
+        WatchAlsoGrid.ItemsSource = items.ToList();
     }
 
     private void UpdateVoicesRatingButton(MovieDetailed details)
@@ -243,11 +262,11 @@ public sealed partial class DetailsPage : Page
             var days = (next.Value.Date - DateTime.Today).Days;
             ScheduleCountdownText.Text = Loc.Get("Details.NextRelease", next.Value.Date.ToString("d MMMM yyyy"))
                 + " (" + Loc.Get("Details.DaysLeft", days) + ")";
-            ScheduleCountdownText.Visibility = Visibility.Visible;
+            ScheduleCountdownBadge.Visibility = Visibility.Visible;
         }
         else
         {
-            ScheduleCountdownText.Visibility = Visibility.Collapsed;
+            ScheduleCountdownBadge.Visibility = Visibility.Collapsed;
         }
 
         var first = groups.First(g => g.Items.Count > 0);
@@ -269,21 +288,26 @@ public sealed partial class DetailsPage : Page
         }
     }
 
-    private static Grid BuildScheduleRow(SeriesScheduleItem item)
+    private Grid BuildScheduleRow(SeriesScheduleItem item)
     {
         var grid = new Grid { ColumnSpacing = 12, Padding = new Thickness(0, 6, 0, 6) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var left = new StackPanel { Spacing = 2 };
-        left.Children.Add(new TextBlock { Text = item.RussianName.Length > 0 ? item.RussianName : item.Title, TextWrapping = TextWrapping.Wrap });
+        left.Children.Add(new TextBlock
+        {
+            Text = item.RussianName.Length > 0 ? item.RussianName : item.Title,
+            TextWrapping = TextWrapping.Wrap,
+            Style = Application.Current.Resources["PrimaryText"] as Style,
+        });
         if (!string.IsNullOrEmpty(item.OriginalName))
         {
             left.Children.Add(new TextBlock
             {
                 Text = item.OriginalName,
                 FontSize = 12,
-                Foreground = Application.Current.Resources["TextFillColorSecondaryBrush"] as Microsoft.UI.Xaml.Media.Brush,
+                Style = Application.Current.Resources["SecondaryText"] as Style,
                 TextWrapping = TextWrapping.Wrap,
             });
         }
@@ -295,14 +319,14 @@ public sealed partial class DetailsPage : Page
         {
             Text = item.ReleaseDate,
             HorizontalAlignment = HorizontalAlignment.Right,
-            Foreground = Application.Current.Resources["TextFillColorSecondaryBrush"] as Microsoft.UI.Xaml.Media.Brush,
+            Style = Application.Current.Resources["SecondaryText"] as Style,
         });
         var title = new TextBlock
         {
             Text = item.Title,
             FontSize = 12,
             HorizontalAlignment = HorizontalAlignment.Right,
-            Foreground = Application.Current.Resources["TextFillColorSecondaryBrush"] as Microsoft.UI.Xaml.Media.Brush,
+            Style = Application.Current.Resources["SecondaryText"] as Style,
         };
         right.Children.Add(title);
         Grid.SetColumn(right, 1);
@@ -349,11 +373,16 @@ public sealed partial class DetailsPage : Page
             var header = new Grid();
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            var name = new TextBlock { Text = r.Name, TextWrapping = TextWrapping.Wrap };
+            var name = new TextBlock
+            {
+                Text = r.Name,
+                TextWrapping = TextWrapping.Wrap,
+                Style = Application.Current.Resources["PrimaryText"] as Style,
+            };
             var percent = new TextBlock
             {
                 Text = r.Percent.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "%",
-                Foreground = Application.Current.Resources["TextFillColorSecondaryBrush"] as Microsoft.UI.Xaml.Media.Brush,
+                Style = Application.Current.Resources["SecondaryText"] as Style,
             };
             Grid.SetColumn(percent, 1);
             header.Children.Add(name);
@@ -388,8 +417,8 @@ public sealed partial class DetailsPage : Page
         if (details.Countries is { Count: > 0 }) AddMeta(Loc.Get("Details.Country"), string.Join(", ", details.Countries.Select(c => c.Name)));
         if (details.Genres is { Count: > 0 }) AddMeta(Loc.Get("Details.Genre"), string.Join(", ", details.Genres.Select(g => g.Name)));
         if (details.Duration is { } mins) AddMeta(Loc.Get("Details.Duration"), $"{mins} {Loc.Get("Common.Minutes")}");
-        if (details.Producers is { Count: > 0 }) AddMeta(Loc.Get("Details.Director"), string.Join(", ", details.Producers.Select(p => p.Name)));
-        if (details.Actors is { Count: > 0 }) AddMeta(Loc.Get("Details.Actors"), string.Join(", ", details.Actors.Select(a => a.Name)));
+        if (details.Producers is { Count: > 0 }) AddPersonsMeta(Loc.Get("Details.Director"), details.Producers);
+        if (details.Actors is { Count: > 0 }) AddPersonsMeta(Loc.Get("Details.Actors"), details.Actors);
         if (details.Slogan is { Length: > 0 }) AddMeta(Loc.Get("Details.Slogan"), details.Slogan);
         if (details.AgeRestriction is { } age) AddMeta(Loc.Get("Details.Age"), age);
     }
@@ -399,23 +428,20 @@ public sealed partial class DetailsPage : Page
         if (rating?.Value == null) return;
         var border = new Border
         {
-            Background = Application.Current.Resources["CardBackgroundFillColorDefaultBrush"] as Microsoft.UI.Xaml.Media.Brush,
-            BorderBrush = Application.Current.Resources["CardStrokeColorDefaultBrush"] as Microsoft.UI.Xaml.Media.Brush,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(12, 6, 12, 6),
+            Style = Application.Current.Resources["RatingCardBorder"] as Style,
         };
         var stack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         stack.Children.Add(new TextBlock
         {
             Text = label,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            Foreground = Application.Current.Resources["TextFillColorSecondaryBrush"] as Microsoft.UI.Xaml.Media.Brush,
+            Style = Application.Current.Resources["SecondaryText"] as Style,
         });
         stack.Children.Add(new TextBlock
         {
             Text = rating.Value.Value.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture),
             FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+            Style = Application.Current.Resources["PrimaryText"] as Style,
         });
         if (rating.Votes != null)
         {
@@ -423,7 +449,7 @@ public sealed partial class DetailsPage : Page
             {
                 Text = $"({rating.Votes} {Loc.Get("Common.Votes")})",
                 FontSize = 11,
-                Foreground = Application.Current.Resources["TextFillColorTertiaryBrush"] as Microsoft.UI.Xaml.Media.Brush,
+                Style = Application.Current.Resources["TertiaryText"] as Style,
             });
         }
 
@@ -447,7 +473,7 @@ public sealed partial class DetailsPage : Page
             Text = Loc.Get("Details.YourRating") + ":",
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 6, 0),
-            Foreground = Application.Current.Resources["TextFillColorSecondaryBrush"] as Microsoft.UI.Xaml.Media.Brush,
+            Style = Application.Current.Resources["SecondaryText"] as Style,
         });
 
         for (var i = 1; i <= 10; i++)
@@ -476,7 +502,7 @@ public sealed partial class DetailsPage : Page
         {
             VerticalAlignment = VerticalAlignment.Center,
             FontSize = 12,
-            Foreground = Application.Current.Resources["TextFillColorSecondaryBrush"] as Microsoft.UI.Xaml.Media.Brush,
+            Style = Application.Current.Resources["SecondaryText"] as Style,
             Visibility = Visibility.Collapsed,
         };
         wrap.Children.Add(_rateThanksText);
@@ -485,9 +511,8 @@ public sealed partial class DetailsPage : Page
 
     private void PaintRateRow(int? selected)
     {
-        var accent = Application.Current.Resources["SystemFillColorAttentionBrush"] as Microsoft.UI.Xaml.Media.Brush
-            ?? new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Gold);
-        var idle = Application.Current.Resources["TextFillColorTertiaryBrush"] as Microsoft.UI.Xaml.Media.Brush;
+        var activeStyle = Application.Current.Resources["StarActiveIcon"] as Style;
+        var idleStyle = Application.Current.Resources["StarIdleIcon"] as Style;
         for (var i = 0; i < _rateButtons.Count; i++)
         {
             var button = _rateButtons[i];
@@ -495,7 +520,7 @@ public sealed partial class DetailsPage : Page
             if (button.Content is FontIcon icon)
             {
                 icon.Glyph = selected != null && i < selected ? "\uE735" : "\uE734";
-                icon.Foreground = selected != null && i < selected ? accent : idle;
+                icon.Style = selected != null && i < selected ? activeStyle : idleStyle;
             }
         }
     }
@@ -584,12 +609,41 @@ public sealed partial class DetailsPage : Page
         if (key == null) return;
         var now = PositionService.Instance.ToggleWatched(key.Value.MovieId, key.Value.TranslatorId, key.Value.SeasonId, key.Value.EpisodeId);
         WatchedButton.IsChecked = now;
+        RenderEpisodes();
 
         // Series only: remember for new-episode notifications.
         if (_details != null && _season != null && _episode != null)
         {
             TrackedSeriesService.Touch(_details.Id, _details.Name, _details.Poster);
         }
+    }
+
+    private void AddPersonsMeta(string label, IReadOnlyList<PersonSimple> persons)
+    {
+        var grid = new Grid { ColumnDefinitions = { new ColumnDefinition { Width = new GridLength(MetaLabelWidth) }, new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) } } };
+        grid.Children.Add(new TextBlock
+        {
+            Text = label,
+            Style = Application.Current.Resources["DetailsLabel"] as Style,
+        });
+        var val = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Style = Application.Current.Resources["DetailsValue"] as Style,
+        };
+        for (var i = 0; i < persons.Count; i++)
+        {
+            if (i > 0) val.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = ", " });
+            var person = persons[i];
+            var link = new Microsoft.UI.Xaml.Documents.Hyperlink();
+            link.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = person.Name });
+            link.Click += (_, _) => Nav.Go<PersonPage>(person);
+            val.Inlines.Add(link);
+        }
+
+        Grid.SetColumn(val, 1);
+        grid.Children.Add(val);
+        MetaPanel.Children.Add(grid);
     }
 
     private void AddMeta(string label, string value)
@@ -754,11 +808,15 @@ public sealed partial class DetailsPage : Page
     {
         EpisodesList.Items.Clear();
         if (_season == null) return;
+        var movieId = _details != null ? ExtractNumericId(_details.Id) ?? _details.Id : null;
+        var translator = _voice?.TranslatorId;
         foreach (var episode in _season.Episodes)
         {
+            var watched = movieId != null && translator != null &&
+                PositionService.Instance.IsWatched(movieId, translator, _season.SeasonId, episode.EpisodeId);
             var button = new ToggleButton
             {
-                Content = episode.Name,
+                Content = watched ? "✓ " + episode.Name : episode.Name,
                 Tag = episode,
                 MinWidth = 44,
                 IsChecked = episode.EpisodeId == _episode?.EpisodeId,
@@ -909,11 +967,7 @@ public sealed partial class DetailsPage : Page
     {
         var border = new Border
         {
-            Background = Application.Current.Resources["CardBackgroundFillColorDefaultBrush"] as Microsoft.UI.Xaml.Media.Brush,
-            BorderBrush = Application.Current.Resources["CardStrokeColorDefaultBrush"] as Microsoft.UI.Xaml.Media.Brush,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(12, 8, 12, 8),
+            Style = Application.Current.Resources["CommentCardBorder"] as Style,
             Margin = new Thickness(depth * 28, 4, 0, 0),
             HorizontalAlignment = HorizontalAlignment.Left,
             MaxWidth = 900,
@@ -931,9 +985,7 @@ public sealed partial class DetailsPage : Page
         {
             header.Children.Add(new Border
             {
-                Background = Application.Current.Resources["AccentFillColorDefaultBrush"] as Microsoft.UI.Xaml.Media.Brush,
-                CornerRadius = new CornerRadius(4),
-                Padding = new Thickness(6, 1, 6, 1),
+                Style = Application.Current.Resources["AdminBadgeBorder"] as Style,
                 Child = new TextBlock
                 {
                     Text = "★",
@@ -947,7 +999,7 @@ public sealed partial class DetailsPage : Page
         {
             Text = comment.Date,
             FontSize = 11,
-            Foreground = Application.Current.Resources["TextFillColorTertiaryBrush"] as Microsoft.UI.Xaml.Media.Brush,
+            Style = Application.Current.Resources["TertiaryText"] as Style,
         });
         stack.Children.Add(header);
 

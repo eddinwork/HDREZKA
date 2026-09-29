@@ -79,6 +79,85 @@ public sealed class RezkaService
         RaiseAuthChanged();
     }
 
+    private static bool SameMirror(string a, string b) =>
+        string.Equals(a.Trim().TrimEnd('/'), b.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Person pages 404 on some mirrors while movies work fine, so probe
+    /// other known mirrors IN PARALLEL (sequential 30s timeouts felt like
+    /// an endless load) with throwaway clients (public pages, session
+    /// untouched). Throws the original error if nothing works.
+    /// </summary>
+    public async Task<PersonDetailed> GetPersonAsync(string pagePath, CancellationToken ct = default)
+    {
+        RezkaException? firstError = null;
+        try
+        {
+            return await Client.GetPersonAsync(pagePath, ct).ConfigureAwait(false);
+        }
+        catch (RezkaException ex)
+        {
+            // Person pages are public: any site-level failure (incl. 403s
+            // surfacing as LoginRequired on stale sessions) is worth
+            // retrying on other mirrors before giving up.
+            firstError = ex;
+            LogPersonAttempt(Client.Options.Mirror, "primary " + ex.Kind);
+        }
+
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(25));
+            var candidates = (await MirrorService.GetCandidatesAsync(cts.Token).ConfigureAwait(false))
+                .Where(m => !SameMirror(m, Client.Options.Mirror))
+                .Take(5)
+                .ToList();
+
+            var pending = candidates
+                .Select(m => (Mirror: m, Task: TryPersonMirrorAsync(m, pagePath, cts.Token)))
+                .ToList();
+            while (pending.Count > 0)
+            {
+                var done = await Task.WhenAny(pending.Select(p => p.Task)).ConfigureAwait(false);
+                var entry = pending.First(p => p.Task == done);
+                pending.Remove(entry);
+                try
+                {
+                    var person = await done.ConfigureAwait(false);
+                    try { cts.Cancel(); } catch { }
+                    return person;
+                }
+                catch (Exception ex)
+                {
+                    var kind = ex is RezkaException rex ? rex.Kind.ToString() : ex.GetType().Name;
+                    LogPersonAttempt(entry.Mirror, "fail " + kind);
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        throw firstError ?? new RezkaException(RezkaError.Network, "person failed");
+    }
+
+    private async Task<PersonDetailed> TryPersonMirrorAsync(string mirror, string pagePath, CancellationToken ct)
+    {
+        using var probe = new RezkaClient(new RezkaClientOptions
+        {
+            Mirror = mirror,
+            UseAndroidHeaders = Client.Options.UseAndroidHeaders,
+        });
+        var person = await probe.GetPersonAsync(pagePath, ct).ConfigureAwait(false);
+        LogPersonAttempt(mirror, "ok");
+        return person;
+    }
+
+    private static void LogPersonAttempt(string mirror, string outcome)
+    {
+        try { App.TryLog(new Exception($"[Person] mirror={mirror} {outcome}")); } catch { }
+    }
+
     public string ErrorText(RezkaException ex) => ex.Kind switch
     {
         RezkaError.LoginRequired => Loc.Get("Error.LoginRequired"),

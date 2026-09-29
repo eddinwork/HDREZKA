@@ -4,13 +4,29 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:HDREZKA.App.Controls"
+    xmlns:api="using:HDREZKA.Core.Api"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
+    <Page.Resources>
+        <DataTemplate x:Key="WatchAlsoTemplate" x:DataType="api:MovieSimple">
+            <controls:MovieCard Movie="{x:Bind}"/>
+        </DataTemplate>
+    </Page.Resources>
+
     <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel x:Name="MainPanel" Padding="36,16,36,24" Spacing="16" MaxWidth="1200" HorizontalAlignment="Left">
+            <Grid x:Name="MainPanel" Padding="36,16,36,24" RowSpacing="16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
                 <Grid x:Name="HeaderGrid" ColumnSpacing="28" RowSpacing="16">
                     <Grid.ColumnDefinitions>
@@ -43,11 +59,11 @@
 
                         <StackPanel x:Name="MetaPanel" Spacing="0" Margin="0,8,0,0"/>
 
-                        <TextBlock x:Name="DescriptionText" TextWrapping="Wrap" Margin="0,12,0,0" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <TextBlock x:Name="DescriptionText" TextWrapping="Wrap" Margin="0,12,0,0" MaxWidth="900" HorizontalAlignment="Left" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                     </StackPanel>
                 </Grid>
 
-                <StackPanel x:Name="VoicesPanel" Spacing="8" Visibility="Collapsed">
+                <StackPanel x:Name="VoicesPanel" Grid.Row="1" Spacing="8" Visibility="Collapsed">
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <TextBlock x:Name="VoicesHeader" Style="{StaticResource SectionHeader}" VerticalAlignment="Center"/>
                         <Button x:Name="VoicesRatingButton" Click="VoicesRatingButton_Click" Visibility="Collapsed"
@@ -61,7 +77,7 @@
                     </ScrollViewer>
                 </StackPanel>
 
-                <StackPanel x:Name="SeasonsPanel" Spacing="8" Visibility="Collapsed">
+                <StackPanel x:Name="SeasonsPanel" Grid.Row="2" Spacing="8" Visibility="Collapsed">
                     <TextBlock x:Name="SeasonsHeader" Style="{StaticResource SectionHeader}"/>
                     <StackPanel Orientation="Horizontal" Spacing="12">
                         <ComboBox x:Name="SeasonBox" MinWidth="180" SelectionChanged="SeasonBox_SelectionChanged"/>
@@ -84,7 +100,9 @@
                     </ScrollViewer>
                 </StackPanel>
 
-                <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
+                <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Hidden" HorizontalScrollMode="Auto"
+                              VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="ActionsRow" Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
                     <Button x:Name="WatchButton" Click="WatchButton_Click" Style="{ThemeResource AccentButtonStyle}" MinHeight="40">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE768;" FontSize="16"/>
@@ -121,19 +139,22 @@
                             <TextBlock x:Name="DownloadText"/>
                         </StackPanel>
                     </Button>
-                </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
 
-                <StackPanel x:Name="SchedulePanel" Spacing="8" Margin="0,20,0,0" Visibility="Collapsed">
+                <StackPanel x:Name="SchedulePanel" Grid.Row="4" Spacing="8" Margin="0,20,0,0" Visibility="Collapsed">
                     <TextBlock x:Name="ScheduleHeader" Style="{StaticResource SectionHeader}"/>
-                    <TextBlock x:Name="ScheduleCountdownText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Visibility="Collapsed"/>
+                    <Border x:Name="ScheduleCountdownBadge" Background="{ThemeResource AccentFillColorDefaultBrush}"
+                            CornerRadius="8" Padding="12,6" HorizontalAlignment="Left" Visibility="Collapsed">
+                        <TextBlock x:Name="ScheduleCountdownText" Foreground="White" TextWrapping="Wrap"/>
+                    </Border>
                     <TextBlock x:Name="ScheduleGroupText" FontWeight="SemiBold" TextWrapping="Wrap"/>
                     <StackPanel x:Name="ScheduleList" Spacing="0"/>
                     <Button x:Name="ScheduleMoreButton" Click="ScheduleMoreButton_Click" Visibility="Collapsed"
                             Background="Transparent" BorderThickness="0" Padding="8,4" HorizontalAlignment="Left"/>
                 </StackPanel>
 
-                <StackPanel x:Name="CommentsSection" Spacing="10" Margin="0,20,0,0" Visibility="Collapsed">
-                    <ToggleButton x:Name="CommentsToggle" Click="CommentsToggle_Click">
+                <StackPanel x:Name="CommentsSection" Grid.Row="5" Spacing="10" Margin="0,20,0,0" Visibility="Collapsed">                    <ToggleButton x:Name="CommentsToggle" Click="CommentsToggle_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE90A;" FontSize="16"/>
                             <TextBlock x:Name="CommentsToggleText"/>
@@ -153,7 +174,34 @@
                         <Button x:Name="CommentsMoreButton" Click="CommentsMoreButton_Click" Visibility="Collapsed"/>
                     </StackPanel>
                 </StackPanel>
-            </StackPanel>
+
+                <StackPanel x:Name="WatchAlsoPanel" Grid.Row="6" Spacing="0" Margin="0,20,0,0" Visibility="Collapsed">
+                    <TextBlock x:Name="WatchAlsoHeader" Style="{StaticResource RowHeaderText}"/>
+                    <ListView x:Name="WatchAlsoGrid" SelectionMode="None" IsItemClickEnabled="False"
+                              ItemTemplate="{StaticResource WatchAlsoTemplate}"
+                              ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                              ScrollViewer.HorizontalScrollMode="Enabled"
+                              ScrollViewer.VerticalScrollMode="Disabled"
+                              ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                        <ListView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsStackPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ListView.ItemsPanel>
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0,0,12,16"/>
+                                <Setter Property="MinWidth" Value="0"/>
+                                <Setter Property="MinHeight" Value="0"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="VerticalContentAlignment" Value="Top"/>
+                                <Setter Property="IsTabStop" Value="False"/>
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                    </ListView>
+                </StackPanel>
+            </Grid>
         </ScrollViewer>
 
         <StackPanel x:Name="LoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">

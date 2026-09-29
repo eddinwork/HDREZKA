@@ -8,7 +8,7 @@ public sealed record UpdateInfo(string Version, string Url, string Notes, string
 
 public static class UpdateService
 {
-    public const string CurrentVersion = "1.5.0";
+    public const string CurrentVersion = "1.6.0";
 
     private const string ReleasesApiUrl = "https://api.github.com/repos/eddinwork/HDREZKA/releases/latest";
     private const string ReleasesPageUrl = "https://github.com/eddinwork/HDREZKA/releases";
@@ -116,6 +116,36 @@ public static class UpdateService
         }
         catch
         {
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Fallback when the API didn't provide an asset URL (HTML scraping
+    /// path): our Setup.exe name follows a fixed convention, verify it
+    /// exists with a 1-byte ranged request. Pure URL building for tests.
+    /// </summary>
+    internal static string BuildSetupUrl(string tag)
+    {
+        var version = tag.Trim().TrimStart('v', 'V');
+        return $"https://github.com/eddinwork/HDREZKA/releases/download/{tag.Trim()}/HDREZKA-Setup-{version}.exe";
+    }
+
+    internal static async Task<string?> TryGuessSetupUrlAsync(string tag)
+    {
+        try
+        {
+            var url = BuildSetupUrl(tag);
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 0);
+            using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+            if (resp.IsSuccessStatusCode) return url;
+            try { App.TryLog(new Exception($"[Update] guess {resp.StatusCode} for {url}")); } catch { }
+        }
+        catch (Exception ex)
+        {
+            try { App.TryLog(ex); } catch { }
         }
 
         return null;
@@ -331,9 +361,17 @@ public static class UpdateService
 
                 if (await dialog.ShowAsync() == Microsoft.UI.Xaml.Controls.ContentDialogResult.Primary)
                 {
-                    if (!string.IsNullOrEmpty(latest.SetupUrl) && IsInstalledVersion)
+                    var setupUrl = latest.SetupUrl;
+                    if (string.IsNullOrEmpty(setupUrl))
                     {
-                        await DownloadAndInstallAsync(window, xamlRoot, latest).ConfigureAwait(false);
+                        // API gave no asset link (HTML fallback path): guess by convention.
+                        setupUrl = await TryGuessSetupUrlAsync(latest.Version).ConfigureAwait(false);
+                    }
+
+                    try { App.TryLog(new Exception($"[Update] install path: setupUrl={(setupUrl != null ? "yes" : "no")} installed={IsInstalledVersion}")); } catch { }
+                    if (!string.IsNullOrEmpty(setupUrl) && IsInstalledVersion)
+                    {
+                        await DownloadAndInstallAsync(window, xamlRoot, latest with { SetupUrl = setupUrl }).ConfigureAwait(false);
                     }
                     else if (!string.IsNullOrEmpty(latest.Url))
                     {
