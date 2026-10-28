@@ -1,10 +1,16 @@
 using System.Diagnostics;
 using System.Net;
 using System.Text.RegularExpressions;
+using HDREZKA.Core.Api;
 
 namespace HDREZKA.App.Services;
 
-public sealed record UpdateInfo(string Version, string Url, string Notes, string? SetupUrl = null);
+public sealed record UpdateInfo(
+    string Version,
+    string Url,
+    string Notes,
+    string? SetupUrl = null,
+    string? SetupSha256 = null);
 
 public static class UpdateService
 {
@@ -91,7 +97,8 @@ public static class UpdateService
             var url = root.TryGetProperty("html_url", out var urlEl) ? urlEl.GetString() ?? "" : "";
             var notes = root.TryGetProperty("body", out var bodyEl) ? bodyEl.GetString() ?? "" : "";
             if (string.IsNullOrEmpty(url)) url = $"https://github.com/eddinwork/HDREZKA/releases/tag/{tag}";
-            return new UpdateInfo(tag, url, notes, FindSetupAsset(root));
+            var asset = FindSetupAsset(root);
+            return new UpdateInfo(tag, url, notes, asset?.Url, asset?.Sha256);
         }
         catch
         {
@@ -99,7 +106,11 @@ public static class UpdateService
         }
     }
 
-    private static string? FindSetupAsset(System.Text.Json.JsonElement root)
+    /// <summary>
+    /// Ищет Setup.exe в релизе и SHA-256 из поля digest (GitHub отдаёт его
+    /// для новых релизов как "sha256:...").
+    /// </summary>
+    private static (string Url, string? Sha256)? FindSetupAsset(System.Text.Json.JsonElement root)
     {
         try
         {
@@ -115,7 +126,15 @@ public static class UpdateService
                 }
 
                 var download = asset.TryGetProperty("browser_download_url", out var urlEl) ? urlEl.GetString() : null;
-                if (!string.IsNullOrEmpty(download)) return download;
+                if (string.IsNullOrEmpty(download)) continue;
+
+                string? digest = null;
+                if (asset.TryGetProperty("digest", out var digestEl) && digestEl.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    digest = ReleaseIntegrity.NormalizeSha256(digestEl.GetString());
+                }
+
+                return (download, digest);
             }
         }
         catch
@@ -281,6 +300,45 @@ public static class UpdateService
 
             queue.TryEnqueue(() =>
             {
+                try { status.Text = Loc.Get("Settings.Verifying"); } catch { }
+            });
+
+            // 1) Ожидаемый SHA-256: digest релиза или sidecar <setup>.sha256.
+            var expected = latest.SetupSha256;
+            if (string.IsNullOrEmpty(expected))
+            {
+                expected = await TryFetchSidecarHashAsync(latest.SetupUrl!).ConfigureAwait(false);
+            }
+
+            var actual = ReleaseIntegrity.ComputeSha256(dest);
+            var hashOk = expected != null && string.Equals(actual, expected, StringComparison.Ordinal);
+
+            // 2) Authenticode: подписанная сборка считается доверенной.
+            var authentiCodeResult = AuthenticodeVerifier.Verify(dest);
+            var signed = authentiCodeResult == 0;
+
+            App.TryLog(new Exception(
+                $"[Update] verify signed={signed} hr=0x{authentiCodeResult:X8} hashMatch={hashOk} expected={(expected != null ? "present" : "none")}"));
+
+            if (!signed && !hashOk)
+            {
+                // Ни подписи, ни подтверждённого хэша: молча исполнять нельзя,
+                // даже если файл пришёл по https.
+                var proceed = await ConfirmUnverifiedAsync(queue, xamlRoot, actual, expected).ConfigureAwait(false);
+                if (!proceed)
+                {
+                    try { File.Delete(dest); } catch { }
+                    queue.TryEnqueue(() =>
+                    {
+                        try { status.Text = Loc.Get("Settings.UpdateCancelled"); } catch { }
+                    });
+                    await showTask.ConfigureAwait(false);
+                    return;
+                }
+            }
+
+            queue.TryEnqueue(() =>
+            {
                 try { status.Text = Loc.Get("Settings.Installing"); } catch { }
             });
             await Task.Delay(400, CancellationToken.None).ConfigureAwait(false);
@@ -322,14 +380,91 @@ public static class UpdateService
         var buffer = new byte[81920];
         long read = 0;
         int n;
-        while ((n = await net.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+
+        // Abort a stalled connection instead of hanging forever.
+        using var stall = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        while (true)
         {
+            stall.CancelAfter(TimeSpan.FromMinutes(2));
+            try
+            {
+                n = await net.ReadAsync(buffer, stall.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                throw new IOException("Download stalled");
+            }
+
+            if (n <= 0) break;
             await file.WriteAsync(buffer.AsMemory(0, n), ct).ConfigureAwait(false);
             read += n;
             if (total is > 0) progress(100.0 * read / total.Value);
         }
 
         progress(100);
+    }
+
+    /// <summary>SHA-256 из sidecar-файла рядом с установщиком ("&lt;hash&gt;  name").</summary>
+    private static async Task<string?> TryFetchSidecarHashAsync(string setupUrl)
+    {
+        try
+        {
+            using var resp = await Http.GetAsync(setupUrl + ".sha256").ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode) return null;
+            var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var token = body.Trim()
+                .Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault();
+            return ReleaseIntegrity.NormalizeSha256(token);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Спрашивает пользователя, запускать ли неподписанный установщик без
+    /// подтверждённого хэша. По умолчанию — «Отмена».
+    /// </summary>
+    private static Task<bool> ConfirmUnverifiedAsync(
+        Microsoft.UI.Dispatching.DispatcherQueue queue, Microsoft.UI.Xaml.XamlRoot xamlRoot,
+        string actualHash, string? expectedHash)
+    {
+        var tcs = new TaskCompletionSource<bool>();
+        var text = Loc.Get("Settings.IntegrityText",
+            actualHash,
+            expectedHash ?? Loc.Get("Settings.IntegrityNoHash"));
+
+        var enqueued = queue.TryEnqueue(async () =>
+        {
+            try
+            {
+                var content = new Microsoft.UI.Xaml.Controls.TextBlock
+                {
+                    Text = text,
+                    TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
+                    MaxWidth = 460,
+                    IsTextSelectionEnabled = true,
+                };
+                var dialog = new Microsoft.UI.Xaml.Controls.ContentDialog
+                {
+                    Title = Loc.Get("Settings.IntegrityTitle"),
+                    Content = content,
+                    PrimaryButtonText = Loc.Get("Common.Cancel"),
+                    SecondaryButtonText = Loc.Get("Settings.InstallAnyway"),
+                    DefaultButton = Microsoft.UI.Xaml.Controls.ContentDialogButton.Primary,
+                    XamlRoot = xamlRoot,
+                };
+                tcs.TrySetResult(await dialog.ShowAsync() == Microsoft.UI.Xaml.Controls.ContentDialogResult.Secondary);
+            }
+            catch
+            {
+                tcs.TrySetResult(false);
+            }
+        });
+
+        return enqueued ? tcs.Task : Task.FromResult(false);
     }
 
     public static async Task ShowUpdateDialogAsync(Microsoft.UI.Xaml.Window window, UpdateInfo latest)

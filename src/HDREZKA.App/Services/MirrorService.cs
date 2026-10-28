@@ -262,6 +262,8 @@ public static class MirrorService
         settings.Mirror = url;
         settings.LastMirrorCheckUtc = DateTime.UtcNow;
         settings.Save();
+        // Данные, загруженные с другого домена, больше не актуальны.
+        ListCache.Instance.Clear();
         RezkaService.Instance.ApplySettings();
     }
 
@@ -461,8 +463,5 @@ public static class MirrorService
         return best;
     }
 
-    private static void LogMirror(string message)
-    {
-        try { App.TryLog(new Exception("[Mirror] " + message)); } catch { }
-    }
+    private static void LogMirror(string message) => Log.Info("[Mirror] " + message);
 }

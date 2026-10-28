@@ -9,6 +9,12 @@ public sealed class RezkaClientOptions
     public string UserAgent { get; set; } = BuildInfo.UserAgent;
     public bool UseAndroidHeaders { get; set; } = true;
     public string AndroidAppVersion { get; set; } = "2.2.2";
+
+    /// <summary>
+    /// Подмена транспорта (для тестов ретраев/редиректов/403). null — обычный
+    /// HttpClientHandler с CookieContainer приложения.
+    /// </summary>
+    public HttpMessageHandler? MessageHandler { get; set; }
 }
 
 public sealed class RezkaClient : IDisposable
@@ -37,13 +43,17 @@ public sealed class RezkaClient : IDisposable
 
     private HttpClient CreateHttp()
     {
-        var handler = new HttpClientHandler
+        var custom = Options.MessageHandler;
+        HttpMessageHandler handler = custom ?? new HttpClientHandler
         {
             CookieContainer = _cookies,
             UseCookies = true,
             AutomaticDecompression = DecompressionMethods.All,
         };
-        return new HttpClient(handler)
+
+        // Кастомный handler принадлежит вызывающему (тесты переиспользуют его
+        // между клиентами) — его не диспозим.
+        return new HttpClient(handler, disposeHandler: custom == null)
         {
             BaseAddress = new Uri(Options.Mirror),
             Timeout = TimeSpan.FromSeconds(30),
@@ -119,6 +129,7 @@ public sealed class RezkaClient : IDisposable
         bool Secure,
         bool HttpOnly);
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public void SaveCookies(string filePath)
     {
         try
@@ -135,8 +146,9 @@ public sealed class RezkaClient : IDisposable
                     c.Secure,
                     c.HttpOnly))
                 .ToList();
-            Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
-            File.WriteAllText(filePath, JsonSerializer.Serialize(stored));
+
+            // Файл cookies = токен аккаунта: на диске только в зашифрованном виде.
+            CookieVault.Write(filePath, JsonSerializer.Serialize(stored));
         }
         catch
         {
@@ -144,12 +156,14 @@ public sealed class RezkaClient : IDisposable
         }
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     public void LoadCookies(string filePath)
     {
         try
         {
             if (!File.Exists(filePath)) return;
-            var stored = JsonSerializer.Deserialize<List<StoredCookie>>(File.ReadAllText(filePath));
+            var result = CookieVault.Read(filePath);
+            var stored = JsonSerializer.Deserialize<List<StoredCookie>>(result.Json);
             if (stored == null) return;
             foreach (var s in stored)
             {
@@ -162,6 +176,12 @@ public sealed class RezkaClient : IDisposable
                 };
                 if (s.Expires.HasValue) cookie.Expires = s.Expires.Value;
                 _cookies.Add(cookie);
+            }
+
+            // Старый открытый файл сразу перешифровываем.
+            if (result.WasPlaintext)
+            {
+                CookieVault.Write(filePath, result.Json);
             }
         }
         catch
@@ -249,7 +269,8 @@ public sealed class RezkaClient : IDisposable
     /// Returns the final response (caller disposes).
     /// </summary>
     private async Task<HttpResponseMessage> SendWithRedirectsAsync(
-        Func<HttpRequestMessage> createRequest, bool isPost, CancellationToken ct)
+        Func<HttpRequestMessage> createRequest, bool isPost, CancellationToken ct,
+        bool allowInsecureDowngrade = true)
     {
         var method = isPost ? HttpMethod.Post : HttpMethod.Get;
         Uri? nextUri = null;
@@ -286,6 +307,16 @@ public sealed class RezkaClient : IDisposable
 
                 var location = resp.Headers.Location;
                 nextUri = location.IsAbsoluteUri ? location : new Uri(effective, location);
+
+                // Понижение https -> http допустимо только для публичных GET
+                // (персоны так отдают страницы), но не для форм с паролем.
+                if (!allowInsecureDowngrade
+                    && effective.Scheme == Uri.UriSchemeHttps
+                    && nextUri.Scheme == Uri.UriSchemeHttp)
+                {
+                    throw RezkaException.InsecureMirror();
+                }
+
                 if (isPost && resp.StatusCode is HttpStatusCode.MovedPermanently
                     or HttpStatusCode.Redirect or HttpStatusCode.RedirectMethod)
                 {
@@ -331,13 +362,20 @@ public sealed class RezkaClient : IDisposable
                             : RezkaException.AccessDenied();
                     }
 
-                    if (!resp.IsSuccessStatusCode && attempt < 3 && IsTransient(resp.StatusCode))
+                    if (!resp.IsSuccessStatusCode)
                     {
-                        await BackoffDelay(attempt, ct).ConfigureAwait(false);
-                        continue;
+                        if (attempt < 3 && IsTransient(resp.StatusCode))
+                        {
+                            await BackoffDelay(attempt, ct).ConfigureAwait(false);
+                            continue;
+                        }
+
+                        // 404/410 — тайтл удалён/скрыт, повтор не поможет.
+                        throw resp.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone
+                            ? RezkaException.NotFound()
+                            : RezkaException.Site($"HTTP {(int)resp.StatusCode}");
                     }
 
-                    resp.EnsureSuccessStatusCode();
                     return await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
                 }
                 catch (RezkaException)
@@ -346,6 +384,8 @@ public sealed class RezkaClient : IDisposable
                 }
                 catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
                 {
+                    // Отмена со стороны UI (ушли со страницы) — не ретраим.
+                    if (ct.IsCancellationRequested) throw;
                     if (attempt >= 3)
                     {
                         throw new RezkaException(RezkaError.Network, ex.Message);
@@ -376,7 +416,7 @@ public sealed class RezkaClient : IDisposable
                         {
                             Content = new FormUrlEncodedContent(form.Where(kv => kv.Value != null)
                                 .Select(kv => new KeyValuePair<string, string>(kv.Key, kv.Value!))),
-                        }, true, ct).ConfigureAwait(false);
+                        }, isPost: true, ct: ct, allowInsecureDowngrade: false).ConfigureAwait(false);
                     if (resp.StatusCode == HttpStatusCode.Forbidden)
                     {
                         // Same 403-flip retry as GET (covers ajax/login/).
@@ -392,13 +432,20 @@ public sealed class RezkaClient : IDisposable
                             : RezkaException.AccessDenied();
                     }
 
-                    if (!resp.IsSuccessStatusCode && attempt < 3 && IsTransient(resp.StatusCode))
+                    if (!resp.IsSuccessStatusCode)
                     {
-                        await BackoffDelay(attempt, ct).ConfigureAwait(false);
-                        continue;
+                        if (attempt < 3 && IsTransient(resp.StatusCode))
+                        {
+                            await BackoffDelay(attempt, ct).ConfigureAwait(false);
+                            continue;
+                        }
+
+                        // 404/410 — тайтл удалён/скрыт, повтор не поможет.
+                        throw resp.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone
+                            ? RezkaException.NotFound()
+                            : RezkaException.Site($"HTTP {(int)resp.StatusCode}");
                     }
 
-                    resp.EnsureSuccessStatusCode();
                     return await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
                 }
                 catch (RezkaException)
@@ -407,6 +454,8 @@ public sealed class RezkaClient : IDisposable
                 }
                 catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
                 {
+                    // Отмена со стороны UI (ушли со страницы) — не ретраим.
+                    if (ct.IsCancellationRequested) throw;
                     if (attempt >= 3)
                     {
                         throw new RezkaException(RezkaError.Network, ex.Message);
@@ -569,6 +618,13 @@ public sealed class RezkaClient : IDisposable
 
     public async Task SignInAsync(string login, string password, CancellationToken ct = default)
     {
+        // Пароль уходит только по https: http-зеркало = передача открытым текстом.
+        if (!Uri.TryCreate(Options.Mirror, UriKind.Absolute, out var mirrorUri)
+            || mirrorUri.Scheme != Uri.UriSchemeHttps)
+        {
+            throw RezkaException.InsecureMirror();
+        }
+
         var body = await PostFormAsync(
             "ajax/login/",
             new Dictionary<string, string?>

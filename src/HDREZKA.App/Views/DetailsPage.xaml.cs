@@ -31,13 +31,14 @@ public sealed partial class DetailsPage : Page
     private bool _mirrorRecovered;
     private int? _bookmarkedCategoryId;
     private int _seasonsGeneration;
+    private CancellationTokenSource? _loadCts;
 
     public DetailsPage()
     {
         InitializeComponent();
         Loaded += (_, _) =>
         {
-            try { App.TryLog(new Exception("[Details] Loaded")); } catch { }
+            try { Log.Info("[Details] Loaded"); } catch { }
             UpdateAdaptiveLayout();
         };
         SizeChanged += (_, _) => UpdateAdaptiveLayout();
@@ -66,6 +67,11 @@ public sealed partial class DetailsPage : Page
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
+        // Ушли со страницы: отменяем незавершённые запросы, чтобы не держать
+        // семафор клиента и не обновлять уже невидимый UI.
+        try { _loadCts?.Cancel(); } catch { }
+        try { _loadCts?.Dispose(); } catch { }
+        _loadCts = null;
         LocalizationService.Instance.LanguageChanged -= OnLanguageChanged;
         SettingsService.Instance.PosterSizeChanged -= OnPosterSizeChanged;
     }
@@ -127,10 +133,19 @@ public sealed partial class DetailsPage : Page
         LoadingPanel.Visibility = Visibility.Visible;
         ErrorPanel.Visibility = Visibility.Collapsed;
 
+        try { _loadCts?.Cancel(); } catch { }
+        _loadCts?.Dispose();
+        _loadCts = new CancellationTokenSource();
+        var token = _loadCts.Token;
+
         try
         {
-            var details = await RezkaService.Instance.Client.GetDetailsAsync(movie.Id);
+            var details = await RezkaService.Instance.Client.GetDetailsAsync(movie.Id, token);
             await LoadDetailsAsync(details);
+        }
+        catch (OperationCanceledException)
+        {
+            // Пользователь ушёл со страницы.
         }
         catch (RezkaException ex)
         {
@@ -191,11 +206,11 @@ public sealed partial class DetailsPage : Page
         {
             _voice = savedVoice;
             MarkSelectedVoice(savedVoice);
-            await RefreshSeasonsAsync(savedVoice, resetSelection: true);
+            await RefreshSeasonsAsync(savedVoice, resetSelection: true, _loadCts?.Token ?? default);
         }
         else
         {
-            await RefreshSeasonsAsync(_voice, resetSelection: false);
+            await RefreshSeasonsAsync(_voice, resetSelection: false, _loadCts?.Token ?? default);
         }
 
         if (last?.SeasonId == null || _seasons == null || _seasons.Count == 0) return;
@@ -287,7 +302,7 @@ public sealed partial class DetailsPage : Page
         UpdateVoicesRatingButton(details);
         RenderSchedule(details);
         RenderWatchAlso(details);
-        try { App.TryLog(new Exception("[Details] Rendered " + details.Id)); } catch { }
+        Log.Info("[Details] Rendered " + details.Id);
     }
 
     private void RenderWatchAlso(MovieDetailed details)
@@ -749,7 +764,7 @@ public sealed partial class DetailsPage : Page
             // а HTML содержит только набор озвучки по умолчанию. Поэтому при
             // смене озвучки всегда перезапрашиваем (так делает mac-клиент),
             // иначе у Coldfilm с двумя сезонами пользователь видел один.
-            await RefreshSeasonsAsync(voice, resetSelection: true);
+            await RefreshSeasonsAsync(voice, resetSelection: true, _loadCts?.Token ?? default);
         }
         finally
         {
@@ -764,7 +779,7 @@ public sealed partial class DetailsPage : Page
     /// Перезапрашивает список сезонов для конкретной озвучки.
     /// HTML-версия остаётся запасным вариантом (фильм, ошибка сети, пустой ответ).
     /// </summary>
-    private async Task RefreshSeasonsAsync(MovieVoiceActing? voice, bool resetSelection)
+    private async Task RefreshSeasonsAsync(MovieVoiceActing? voice, bool resetSelection, CancellationToken ct = default)
     {
         if (_details == null || voice == null) return;
 
@@ -785,11 +800,15 @@ public sealed partial class DetailsPage : Page
         IReadOnlyList<MovieSeason>? seasons = null;
         try
         {
-            seasons = await RezkaService.Instance.Client.GetSeriesSeasonsAsync(numericId, voice, _details.Favs);
+            seasons = await RezkaService.Instance.Client.GetSeriesSeasonsAsync(numericId, voice, _details.Favs, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
         }
         catch (Exception ex)
         {
-            App.TryLog(new Exception($"[Details] seasons translator={voice.TranslatorId} failed: {ex.Message}"));
+            Log.Info($"[Details] seasons translator={voice.TranslatorId} failed: {ex.Message}");
         }
 
         // Пользователь успел переключить другую озвучку — этот ответ устарел.
@@ -1295,10 +1314,5 @@ public sealed partial class DetailsPage : Page
         if (_movie != null) _ = LoadAsync(_movie);
     }
 
-    internal static string? ExtractNumericId(string cleanPath)
-    {
-        var seg = cleanPath.Split('/').LastOrDefault() ?? "";
-        var first = seg.Split('-').FirstOrDefault() ?? "";
-        return first.Length > 0 && first.All(char.IsDigit) ? first : null;
-    }
+    internal static string? ExtractNumericId(string cleanPath) => Parsers.NumericId(cleanPath);
 }

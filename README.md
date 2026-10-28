@@ -2,7 +2,7 @@
 
 Неофициальный клиент HDRezka для Windows: каталог фильмов, сериалов, мультфильмов и аниме, онлайн-просмотр, закладки, история, комментарии и оценки.
 
-![version](https://img.shields.io/badge/version-1.7.0-blue) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-lightgrey) ![license](https://img.shields.io/badge/license-MIT-green) ![downloads](https://img.shields.io/github/downloads/eddinwork/HDREZKA/total)
+![version](https://img.shields.io/badge/version-1.8.0-blue) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-lightgrey) ![license](https://img.shields.io/badge/license-MIT-green) ![downloads](https://img.shields.io/github/downloads/eddinwork/HDREZKA/total)
 
 ## Контакты для связи:
 - Группа в Telegram: https://t.me/hdrezkawin
@@ -24,6 +24,14 @@
 - **Оценки** — голосование за фильмы и сериалы (1–10)
 - **Аккаунт** — вход, профиль, выход
 - **Персонализация** — тема (системная/светлая/тёмная), язык (русский/English/українська), размер постеров, блоки главной (порядок и видимость), зеркало сайта с автоматическим подбором (с учётом региона)
+
+## Что нового в 1.8.0
+
+- **Безопасность.** Файл cookies шифруется через DPAPI — сессию нельзя унести с диска, просто скопировав JSON. Вход разрешён только через HTTPS-зеркало (по http пароль уходил бы открытым текстом), а скачанный установщик обновления проверяется по SHA-256 из релиза и по подписи Authenticode; если подтвердить не удалось — установка требует явного подтверждения.
+- **Отмена и таймауты.** Зависшая загрузка прерывается после 2 минут без данных, запросы страниц отменяются при уходе со страницы, 404 больше не ретраится и показывает «тайтл не найден».
+- **Сеть покрыта тестами.** Ретраи, переключение Android-заголовков на 403, редиректы и запрет https→http для логина проверяются на фейковом HTTP-обработчике (75 тестов вместо 37).
+- **Производительность.** Главная кэшируется на 3 минуты (возврат назад не тянет 7 запросов), постеры декодируются в размер карточки (меньше памяти), комментарии-«простыня» в crash.log убрана.
+- **Диагностика.** Информационные логи идут в `app.log` с уровнями, `crash.log` остаётся только для настоящих ошибок; утилиты (числовой id, даты «Досмотреть») вынесены в Core и покрыты тестами.
 
 ## Что нового в 1.7.0
 
@@ -56,9 +64,9 @@
 
 ## Установка
 
-Вариант 1 — установщик: скачайте `HDREZKA-Setup-1.7.0.exe` из раздела [Releases](../../releases), запустите и укажите папку. Ярлыки появятся в меню «Пуск» (и на рабочем столе — опционально).
+Вариант 1 — установщик: скачайте `HDREZKA-Setup-1.8.0.exe` из раздела [Releases](../../releases), запустите и укажите папку. Ярлыки появятся в меню «Пуск» (и на рабочем столе — опционально).
 
-Вариант 2 — portable: скачайте `HDREZKA-1.7.0-portable-win-x64.zip`, распакуйте и запустите `HDREZKA.App.exe`. Настройки хранятся в `%AppData%/HDREZKA`.
+Вариант 2 — portable: скачайте `HDREZKA-1.8.0-portable-win-x64.zip`, распакуйте и запустите `HDREZKA.App.exe`. Настройки хранятся в `%AppData%/HDREZKA`.
 
 ## Частые вопросы
 
@@ -77,6 +85,18 @@ dotnet publish src/HDREZKA.App/HDREZKA.App.csproj -c Release  # папка дл�
 ```
 
 Требуется .NET 8 SDK (или новее). Установщик собирается скриптом `installer/installer.iss` через [Inno Setup 6](https://jrsoftware.org/isinfo.php). Структура: `src/HDREZKA.App` (WinUI 3: Views, Controls, Services), `src/HDREZKA.Core` (API-клиент и парсеры), `tests/HDREZKA.Tests`.
+
+### Релиз
+
+1. Обновите `<Version>` в `Directory.Build.props` и `MyAppVersion` в `installer/installer.iss`.
+2. `dotnet publish src/HDREZKA.App/HDREZKA.App.csproj -c Release`, затем соберите установщик ISCC.
+3. Положите рядом с установщиком `.sha256`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File installer/make-sha256.ps1
+```
+
+Приложение при автообновлении сверяет скачанный установщик с этим файлом и с Authenticode-подписью. Если ни того, ни другого нет, установка спросит подтверждение. Подписанный установщик (signtool) проходит проверку без вопросов.
 
 ## Дисклеймер
 

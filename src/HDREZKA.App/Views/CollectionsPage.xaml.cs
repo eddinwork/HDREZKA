@@ -95,7 +95,7 @@ public sealed partial class CollectionsPage : Page
             _collections.Clear();
             _collections.AddRange(collections);
 
-            App.TryLog(new Exception($"[Collections] folders={collections.Count} ids={string.Join(",", collections.Select(c => c.Id))}"));
+            Log.Info($"[Collections] folders={collections.Count} ids={string.Join(",", collections.Select(c => c.Id))}");
 
             _collectionsLoaded = true;
 
@@ -263,7 +263,7 @@ public sealed partial class CollectionsPage : Page
             _items.AddRange(items);
             ItemsGrid.ItemsSource = _items.ToList();
             _hasMore = items.Count > 0;
-            App.TryLog(new Exception($"[Collections] items: id={_currentCollectionId} page={_page} got={items.Count} total={_items.Count}"));
+            Log.Info($"[Collections] items: id={_currentCollectionId} page={_page} got={items.Count} total={_items.Count}");
 
             if (!string.IsNullOrWhiteSpace(title))
             {
@@ -282,7 +282,7 @@ public sealed partial class CollectionsPage : Page
         }
         catch (RezkaException ex)
         {
-            App.TryLog(new Exception($"[Collections] items failed: id={_currentCollectionId} page={_page} {ex.Message}"));
+            Log.Info($"[Collections] items failed: id={_currentCollectionId} page={_page} {ex.Message}");
 
             if (!_mirrorRecovered && ex.Kind is RezkaError.Network or RezkaError.AccessDenied or RezkaError.MirrorBanned)
             {

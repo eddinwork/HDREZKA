@@ -6,6 +6,8 @@ public enum RezkaError
     MirrorBanned,
     LoginRequired,
     AccessDenied,
+    NotFound,
+    InsecureMirror,
     Site,
     Parse
 }
@@ -24,4 +26,10 @@ public sealed class RezkaException : Exception
     public static RezkaException LoginRequired() => new(RezkaError.LoginRequired, "Login required");
     public static RezkaException AccessDenied() => new(RezkaError.AccessDenied, "Access denied by site");
     public static RezkaException MirrorBanned() => new(RezkaError.MirrorBanned, "Mirror is unavailable");
+
+    public static RezkaException NotFound() => new(RezkaError.NotFound, "Title not found on the site");
+
+    /// <summary>Пароль нельзя отправлять по http: зеркало обязано быть https.</summary>
+    public static RezkaException InsecureMirror() =>
+        new(RezkaError.InsecureMirror, "Mirror must use HTTPS for sign-in");
 }

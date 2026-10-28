@@ -127,13 +127,13 @@ public sealed partial class PlayerPage : Page
         base.OnNavigatedTo(e);
         if (e.Parameter is not PlayerLaunch launch)
         {
-            App.TryLog(new Exception("[Player] OnNavigatedTo: no PlayerLaunch parameter"));
+            Log.Info("[Player] OnNavigatedTo: no PlayerLaunch parameter");
             return;
         }
 
         _launch = launch;
         _quality = SettingsService.Instance.DefaultQuality;
-        App.TryLog(new Exception($"[Player] OnNavigatedTo: id={launch.Details.Id} voice={launch.Voice.TranslatorId}"));
+        Log.Info($"[Player] OnNavigatedTo: id={launch.Details.Id} voice={launch.Voice.TranslatorId}");
 
         TitleText.Text = launch.Details.Name;
         UpdateEpisodeText();
@@ -215,7 +215,7 @@ public sealed partial class PlayerPage : Page
         SubscribePlayerEvents();
         ApplySpeed();
         _saveTimer.Start();
-        App.TryLog(new Exception("[Player] Native backend ready"));
+        Log.Info("[Player] Native backend ready");
     }
 
     private void SubscribePlayerEvents()
@@ -422,7 +422,7 @@ public sealed partial class PlayerPage : Page
             _video = await RezkaService.Instance.Client.GetMovieVideoAsync(
                 _launch.Voice, _launch.Season, _launch.Episode, _launch.Details.Favs);
 
-            App.TryLog(new Exception($"[Player] Got video: tracks={_video.Videos.Count} subs={_video.Subtitles.Count}"));
+            Log.Info($"[Player] Got video: tracks={_video.Videos.Count} subs={_video.Subtitles.Count}");
 
             var track = _video.GetClosestTo(qualityOverride ?? _quality) ?? _video.GetMaxQuality();
             if (track == null || track.Urls.Count == 0)
@@ -444,8 +444,7 @@ public sealed partial class PlayerPage : Page
 
             _candidateIndex = 0;
             _pendingSeekMs = seekToSaved ? GetSavedPositionMs() : CurrentPositionMs();
-            App.TryLog(new Exception(
-                $"[Player] Candidates={_candidates.Count} first={_candidates[0].Quality} {_candidates[0].Url}"));
+            Log.Info($"[Player] Candidates={_candidates.Count} first={_candidates[0].Quality} {_candidates[0].Url}");
             await OpenCurrentCandidateAsync();
         }
         catch (RezkaException ex)
@@ -581,12 +580,12 @@ public sealed partial class PlayerPage : Page
             // Setting Source resets PlaybackRate to 1x: re-apply saved speed,
             // otherwise UI shows 2x while video plays at 1x.
             ApplySpeed();
-            App.TryLog(new Exception($"[Player] Source set q={quality} seek={_pendingSeekMs} url={url}"));
+            Log.Info($"[Player] Source set q={quality} seek={_pendingSeekMs} url={url}");
             _ = WatchOpenTimeoutAsync(gen);
         }
         catch (Exception ex)
         {
-            App.TryLog(new Exception($"[Player] Candidate failed ({quality}): {ex.Message}"));
+            Log.Info($"[Player] Candidate failed ({quality}): {ex.Message}");
             if (TryNextCandidate()) return;
             ShowStatus(Loc.Get("Details.NoVideo"), showMirrorButton: true);
         }
@@ -603,8 +602,7 @@ public sealed partial class PlayerPage : Page
         if (resume > 0) _pendingSeekMs = resume;
 
         _candidateIndex++;
-        App.TryLog(new Exception(
-            $"[Player] Next candidate {_candidateIndex + 1}/{_candidates.Count}: {_candidates[_candidateIndex].Quality}"));
+        Log.Info($"[Player] Next candidate {_candidateIndex + 1}/{_candidates.Count}: {_candidates[_candidateIndex].Quality}");
         _ = OpenCurrentCandidateAsync();
         return true;
     }
@@ -640,7 +638,7 @@ public sealed partial class PlayerPage : Page
         if (player == null) return;
         player.Source = _playbackItem;
         ApplySpeed();
-        App.TryLog(new Exception("[Player] Local source set, pending seek=" + _pendingSeekMs));
+        Log.Info("[Player] Local source set, pending seek=" + _pendingSeekMs);
         _ = WatchOpenTimeoutAsync(gen);
         await Task.CompletedTask;
     }
@@ -937,7 +935,7 @@ public sealed partial class PlayerPage : Page
                 TotalTimeText.Text = FormatTime((long)duration.TotalMilliseconds);
             }
 
-            App.TryLog(new Exception($"[Player] MediaOpened duration={duration}"));
+            Log.Info($"[Player] MediaOpened duration={duration}");
             if (_pendingSeekMs > 0)
             {
                 var seek = _pendingSeekMs;
@@ -1024,7 +1022,7 @@ public sealed partial class PlayerPage : Page
         {
             await Task.Delay(TimeSpan.FromSeconds(20));
             if (gen != _loadGen || _mediaOpened || _player == null) return;
-            App.TryLog(new Exception("[Player] Open timeout: no MediaOpened in 20s"));
+            Log.Info("[Player] Open timeout: no MediaOpened in 20s");
 
             // Ссылка не открылась: возможно, конкретный CDN-узел недоступен
             // в регионе пользователя — пробуем следующую.
@@ -1181,7 +1179,7 @@ public sealed partial class PlayerPage : Page
                 BufferingStatusRow.Visibility = Visibility.Collapsed;
             }
 
-            App.TryLog(new Exception($"[Player] State: {state} Time: {posMs}"));
+            Log.Info($"[Player] State: {state} Time: {posMs}");
             }
             catch (Exception ex)
             {
@@ -1205,7 +1203,7 @@ public sealed partial class PlayerPage : Page
         if (idx <= 0) return;
 
         var next = ordered[idx - 1];
-        App.TryLog(new Exception($"[Player] Auto quality drop: {_quality} -> {next.Quality}"));
+        Log.Info($"[Player] Auto quality drop: {_quality} -> {next.Quality}");
         _quality = next.Quality;
         _ = LoadVideoAsync(seekToSaved: false, qualityOverride: next.Quality);
     }
@@ -1253,7 +1251,7 @@ public sealed partial class PlayerPage : Page
     {
         UpdateDisplayRequest(false);
         _bufferStart = null;
-        App.TryLog(new Exception($"[Player] MediaFailed: {e.Error} {e.ErrorMessage} code={e.ExtendedErrorCode}"));
+        Log.Info($"[Player] MediaFailed: {e.Error} {e.ErrorMessage} code={e.ExtendedErrorCode}");
         DispatcherQueue.TryEnqueue(() =>
         {
             if (_tearingDown) return;
@@ -1746,7 +1744,7 @@ public sealed partial class PlayerPage : Page
             _savedBounds = new Windows.Graphics.RectInt32(
                 appWindow.Position.X, appWindow.Position.Y,
                 appWindow.Size.Width, appWindow.Size.Height);
-            App.TryLog(new Exception($"[Player] FS enter: kind={appWindow.Presenter.Kind} bounds={appWindow.Size.Width}x{appWindow.Size.Height}"));
+            Log.Info($"[Player] FS enter: kind={appWindow.Presenter.Kind} bounds={appWindow.Size.Width}x{appWindow.Size.Height}");
             try
             {
                 // NOTE: intentionally NOT touching border/titlebar flags here.
@@ -1769,7 +1767,7 @@ public sealed partial class PlayerPage : Page
                     appWindow.MoveAndResize(area.OuterBounds);
                 }
 
-                App.TryLog(new Exception($"[Player] FS on: kind={appWindow.Presenter.Kind} bounds={appWindow.Size.Width}x{appWindow.Size.Height}@{appWindow.Position.X},{appWindow.Position.Y}"));
+                Log.Info($"[Player] FS on: kind={appWindow.Presenter.Kind} bounds={appWindow.Size.Width}x{appWindow.Size.Height}@{appWindow.Position.X},{appWindow.Position.Y}");
                 try { ApplyWindowChrome(); } catch { }
             }
             catch (Exception ex)
@@ -1820,7 +1818,7 @@ public sealed partial class PlayerPage : Page
 
             try { window.Activate(); } catch { }
 
-            App.TryLog(new Exception($"[Player] FS off: kind={appWindow.Presenter.Kind} bounds={appWindow.Size.Width}x{appWindow.Size.Height}"));
+            Log.Info($"[Player] FS off: kind={appWindow.Presenter.Kind} bounds={appWindow.Size.Width}x{appWindow.Size.Height}");
         }
         catch (Exception ex)
         {

@@ -10,10 +10,10 @@
     и README.md — они не умеют читать MSBuild-свойства.
   -->
   <PropertyGroup>
-    <Version>1.7.0</Version>
-    <FileVersion>1.7.0.0</FileVersion>
-    <AssemblyVersion>1.7.0.0</AssemblyVersion>
-    <InformationalVersion>1.7.0</InformationalVersion>
+    <Version>1.8.0</Version>
+    <FileVersion>1.8.0.0</FileVersion>
+    <AssemblyVersion>1.8.0.0</AssemblyVersion>
+    <InformationalVersion>1.8.0</InformationalVersion>
     <Product>HDREZKA for Windows</Product>
     <Company>eddinwork</Company>
     <Copyright>Copyright (c) 2026. Portions based on HDrezka for macOS, MIT License (c) 2025 voidboost.</Copyright>

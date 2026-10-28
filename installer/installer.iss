@@ -8,7 +8,7 @@
 ; (Inno Setup не умеет читать MSBuild-свойства, поэтому версия дублируется здесь).
 
 #define MyAppName "HDREZKA"
-#define MyAppVersion "1.7.0"
+#define MyAppVersion "1.8.0"
 #define MyAppPublisher "eddinwork"
 #define MyAppExeName "HDREZKA.App.exe"
 #define MyAppSourceDir "..\\src\\HDREZKA.App\\bin\\Release\\net8.0-windows10.0.19041.0\\win-x64\\publish"

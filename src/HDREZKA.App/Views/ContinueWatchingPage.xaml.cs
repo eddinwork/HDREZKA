@@ -86,46 +86,10 @@ public sealed partial class ContinueWatchingPage : Page
     }
 
     /// <summary>
-    /// Server "continue" dates look like "12.09.2026", sometimes with time
-    /// or relative words. Unparseable → null (caller falls back).
+    /// Даты «Досмотреть» с сайта ("12.09.2026", "сегодня", "вчера") —
+    /// разбор живёт в Core, чтобы форматы были покрыты тестами.
     /// </summary>
-    internal static DateTime? ParseAccountDate(string date)
-    {
-        if (string.IsNullOrWhiteSpace(date)) return null;
-        var s = date.Trim();
-        var today = DateTime.Today;
-
-        if (s.StartsWith("сегодня", StringComparison.OrdinalIgnoreCase)
-            || s.StartsWith("today", StringComparison.OrdinalIgnoreCase)
-            || s.StartsWith("сьогодні", StringComparison.OrdinalIgnoreCase))
-        {
-            return today;
-        }
-
-        if (s.StartsWith("вчера", StringComparison.OrdinalIgnoreCase)
-            || s.StartsWith("yesterday", StringComparison.OrdinalIgnoreCase)
-            || s.StartsWith("вчора", StringComparison.OrdinalIgnoreCase))
-        {
-            return today.AddDays(-1);
-        }
-
-        string[] formats =
-        [
-            "dd.MM.yyyy HH:mm", "dd.MM.yyyy H:mm", "dd.MM.yyyy",
-            "dd-MM-yyyy HH:mm", "dd-MM-yyyy",
-            "yyyy-MM-dd HH:mm", "yyyy-MM-dd",
-            "dd/MM/yyyy",
-        ];
-        if (DateTime.TryParseExact(s, formats,
-                System.Globalization.CultureInfo.GetCultureInfo("ru-RU"),
-                System.Globalization.DateTimeStyles.None, out var exact))
-        {
-            return exact;
-        }
-
-        if (DateTime.TryParse(s, out var generic)) return generic;
-        return null;
-    }
+    internal static DateTime? ParseAccountDate(string date) => SiteDates.ParseRelativeOrExact(date);
 
     internal static ContinueItem FromLocal(WatchPosition p)
     {
@@ -337,10 +301,5 @@ public sealed partial class ContinueWatchingPage : Page
         }
     }
 
-    internal static string? ExtractNumericId(string cleanPath)
-    {
-        var seg = cleanPath.Split('/').LastOrDefault() ?? "";
-        var first = seg.Split('-').FirstOrDefault() ?? "";
-        return first.Length > 0 && first.All(char.IsDigit) ? first : null;
-    }
+    internal static string? ExtractNumericId(string cleanPath) => Parsers.NumericId(cleanPath);
 }

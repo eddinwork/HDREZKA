@@ -121,7 +121,7 @@ public partial class App : Application
 
     private void OnAppInstanceActivated(object? sender, Microsoft.Windows.AppLifecycle.AppActivationArguments args)
     {
-        try { TryLog(new Exception("[Protocol] redirected activation")); } catch { }
+        Services.Log.Info("[Protocol] redirected activation");
         var path = GetProtocolDetailsPath(args) ?? TakePendingProtocolUri();
         if (path == null || MainWindow == null) return;
         MainWindow.DispatcherQueue.TryEnqueue(() =>
@@ -186,7 +186,7 @@ public partial class App : Application
                     var path = Services.ProtocolService.ParseDetailsPath(uri);
                     if (path != null)
                     {
-                        TryLog(new Exception($"[Protocol] pending uri={uri}"));
+                        Services.Log.Info($"[Protocol] pending uri={uri}");
                         return path;
                     }
                 }
@@ -204,11 +204,11 @@ public partial class App : Application
     {
         try
         {
-            TryLog(new Exception($"[Protocol] kind={args.Kind}"));
+            Services.Log.Info($"[Protocol] kind={args.Kind}");
             // COM path (packaged) or interface-based activation.
             if (args.Data is Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs proto)
             {
-                TryLog(new Exception($"[Protocol] uri={proto.Uri}"));
+                Services.Log.Info($"[Protocol] uri={proto.Uri}");
                 return Services.ProtocolService.ParseDetailsPath(proto.Uri);
             }
 
@@ -237,7 +237,7 @@ public partial class App : Application
                     var raw = (end > start ? cmd.Substring(start, end - start) : cmd[start..]).Trim().Trim('"');
                     if (Uri.TryCreate(raw, UriKind.Absolute, out var uri))
                     {
-                        TryLog(new Exception($"[Protocol] uri={uri}"));
+                        Services.Log.Info($"[Protocol] uri={uri}");
                         return Services.ProtocolService.ParseDetailsPath(uri);
                     }
                 }
@@ -245,7 +245,7 @@ public partial class App : Application
 
             if (args.Data != null)
             {
-                TryLog(new Exception($"[Protocol] data type={args.Data.GetType().FullName}"));
+                Services.Log.Info($"[Protocol] data type={args.Data.GetType().FullName}");
             }
 
             return null;
@@ -263,7 +263,7 @@ public partial class App : Application
             await Task.Delay(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
             var title = Views.PlayerPage.TakePlaybackMarker();
             if (title == null) return;
-            try { TryLog(new Exception("[Crash] showing aftermath dialog for " + title)); } catch { }
+            Services.Log.Info("[Crash] showing aftermath dialog for " + title);
 
             var tcs = new TaskCompletionSource();
             var enqueued = window.DispatcherQueue.TryEnqueue(async () =>

@@ -24,7 +24,8 @@ public static class PosterCache
     // постеров разом, без гейта это шторм из HTTP-запросов и декодирований.
     private static readonly SemaphoreSlim DownloadGate = new(6, 6);
 
-    private const int MemoryCap = 300;
+    private const int MemoryCap = 160;
+    private const int DecodeWidth = 360;
     private const long DirCapBytes = 200L * 1024 * 1024;
     private static readonly TimeSpan MaxAge = TimeSpan.FromDays(30);
 
@@ -73,11 +74,19 @@ public static class PosterCache
                 try
                 {
                     if ((string?)image.Tag != key) return; // recycled for another item
-                    var bmp = Memory.GetOrAdd(key, _ => new BitmapImage(new Uri(path)));
+                    var bmp = Memory.GetOrAdd(key, _ =>
+                    {
+                        // Декодируем в размер карточки (×2 для HiDPI), а не в
+                        // оригинал: постеры на сайте бывают 500+ px, и 300 таких
+                        // в памяти — это сотни мегабайт.
+                        var decoded = new BitmapImage { DecodePixelWidth = DecodeWidth };
+                        decoded.UriSource = new Uri(path);
+                        return decoded;
+                    });
                     image.Source = bmp;
                     if (Memory.Count > MemoryCap)
                     {
-                        foreach (var k in Memory.Keys.Take(Memory.Count - 200).ToList())
+                        foreach (var k in Memory.Keys.Take(Memory.Count - MemoryCap / 2).ToList())
                         {
                             Memory.TryRemove(k, out _);
                         }

@@ -16,6 +16,8 @@ public sealed partial class HomePage : Page
     private readonly Dictionary<string, bool> _sectionHasContent = new(StringComparer.OrdinalIgnoreCase);
 
     private bool _loaded;
+    private DateTime _loadedAt;
+    private CancellationTokenSource? _loadCts;
     private bool _mirrorRecovered;
     private readonly List<MovieSimple> _heroItems = new();
     private int _heroIndex;
@@ -24,6 +26,9 @@ public sealed partial class HomePage : Page
     public HomePage()
     {
         InitializeComponent();
+
+        // Страница кэшируется: возврат с деталей не пересоздаёт главную.
+        NavigationCacheMode = NavigationCacheMode.Required;
 
         _heroTimer.Tick += (_, _) => ShowHero(_heroIndex + 1);
 
@@ -40,9 +45,10 @@ public sealed partial class HomePage : Page
         base.OnNavigatedTo(e);
         ApplyLocalization();
         LocalizationService.Instance.LanguageChanged += OnLanguageChanged;
-        if (!_loaded)
+        if (!_loaded || DateTime.UtcNow - _loadedAt > TimeSpan.FromMinutes(10))
         {
             _loaded = true;
+            _loadedAt = DateTime.UtcNow;
             Load();
         }
         else if (_heroItems.Count > 1)
@@ -61,6 +67,7 @@ public sealed partial class HomePage : Page
     {
         base.OnNavigatedFrom(e);
         _heroTimer.Stop();
+        try { _loadCts?.Cancel(); } catch { }
         SettingsService.Instance.PosterSizeChanged -= OnPosterSizeChanged;
         TrackedSeriesService.UpdatesChanged -= OnTrackedUpdatesChanged;
         LocalizationService.Instance.LanguageChanged -= OnLanguageChanged;
@@ -122,18 +129,38 @@ public sealed partial class HomePage : Page
         LoadingPanel.Visibility = Visibility.Visible;
         ErrorPanel.Visibility = Visibility.Collapsed;
 
+        try { _loadCts?.Cancel(); } catch { }
+        _loadCts = new CancellationTokenSource();
+        var token = _loadCts.Token;
+
         var client = RezkaService.Instance.Client;
+        var ttl = TimeSpan.FromMinutes(3);
+
+        // Главная = 7 запросов. Кэш на 3 минуты убирает их при каждом
+        // возвращении на страницу; смена зеркала кэш сбрасывает.
+        Task<IReadOnlyList<MovieSimple>> CachedHot() =>
+            ListCache.Instance.GetOrAddAsync("home.hot", ttl, () => client.GetHotMoviesAsync(ct: token));
+
+        Task<(string Title, IReadOnlyList<MovieSimple> Items)> CachedSection(Section section) =>
+            ListCache.Instance.GetOrAddAsync($"home.{section}", ttl,
+                () => client.GetSectionListAsync(section, ListFilter.Latest, ct: token));
+
+        Task<(string Title, IReadOnlyList<MovieSimple> Items)> CachedHome(ListFilter filter) =>
+            ListCache.Instance.GetOrAddAsync($"home.{filter}", ttl,
+                () => client.GetHomeListAsync(filter, ct: token));
+
         try
         {
-            var hot = WrapList(client.GetHotMoviesAsync());
-            var films = WrapTitle(client.GetSectionListAsync(Section.Films, ListFilter.Latest));
-            var series = WrapTitle(client.GetSectionListAsync(Section.Series, ListFilter.Latest));
-            var cartoons = WrapTitle(client.GetSectionListAsync(Section.Cartoons, ListFilter.Latest));
-            var popular = WrapTitle(client.GetHomeListAsync(ListFilter.Popular));
-            var watching = WrapTitle(client.GetHomeListAsync(ListFilter.WatchingNow));
-            var soon = WrapTitle(client.GetHomeListAsync(ListFilter.Soon));
+            var hot = WrapList(CachedHot());
+            var films = WrapTitle(CachedSection(Section.Films));
+            var series = WrapTitle(CachedSection(Section.Series));
+            var cartoons = WrapTitle(CachedSection(Section.Cartoons));
+            var popular = WrapTitle(CachedHome(ListFilter.Popular));
+            var watching = WrapTitle(CachedHome(ListFilter.WatchingNow));
+            var soon = WrapTitle(CachedHome(ListFilter.Soon));
 
             await Task.WhenAll(hot, films, series, cartoons, popular, watching, soon);
+            if (token.IsCancellationRequested) return;
 
             BindHero(hot.Result.Take(HeroCount).ToList());
             BindSection("Films", FilmsSection, FilmsGrid, films.Result.Items);
@@ -145,6 +172,10 @@ public sealed partial class HomePage : Page
             ApplySectionLayout();
 
             LoadingPanel.Visibility = Visibility.Collapsed;
+        }
+        catch (OperationCanceledException)
+        {
+            // Ушли со страницы — молча.
         }
         catch (RezkaException ex)
         {
@@ -571,6 +602,10 @@ public sealed partial class HomePage : Page
         {
             return await task;
         }
+        catch (OperationCanceledException)
+        {
+            throw; // уход со страницы не должен выглядеть как «пустая главная»
+        }
         catch (RezkaException ex) when (ex.Kind is RezkaError.Network or RezkaError.MirrorBanned
             or RezkaError.AccessDenied or RezkaError.LoginRequired)
         {
@@ -590,6 +625,10 @@ public sealed partial class HomePage : Page
         try
         {
             return await task;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (RezkaException ex) when (ex.Kind is RezkaError.Network or RezkaError.MirrorBanned
             or RezkaError.AccessDenied or RezkaError.LoginRequired)

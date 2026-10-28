@@ -56,8 +56,6 @@ public sealed record MovieVideo(
     string? Thumbnails)
 {
     public IReadOnlyList<string> AvailableQualities => Videos.Where(v => !v.NeedAccount && !v.NeedPremium).Select(v => v.Quality).ToList();
-    public IReadOnlyList<string> AccountQualities => Videos.Where(v => v.NeedAccount && !v.NeedPremium).Select(v => v.Quality).ToList();
-    public IReadOnlyList<string> PremiumQualities => Videos.Where(v => !v.NeedAccount && v.NeedPremium).Select(v => v.Quality).ToList();
 
     public VideoTrack? GetMaxQuality() => Videos.LastOrDefault(v => !v.NeedAccount && !v.NeedPremium);
 

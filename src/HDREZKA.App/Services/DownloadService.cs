@@ -340,17 +340,33 @@ public sealed class DownloadService
         using (var file = File.Create(tmp))
         {
             var buffer = new byte[81920];
-            int n;
-            while ((n = await net.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+
+            // Зависшее соединение не должно блокировать очередь навсегда:
+            // если 2 минуты подряд не приходит ни байта — падаем с ошибкой.
+            using var stall = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            while (true)
             {
+                stall.CancelAfter(TimeSpan.FromMinutes(2));
+                int read;
+                try
+                {
+                    read = await net.ReadAsync(buffer, stall.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    throw new IOException("Download stalled");
+                }
+
+                if (read <= 0) break;
+
                 while (_paused && !ct.IsCancellationRequested)
                 {
                     await Task.Delay(200, ct).ConfigureAwait(false);
                 }
 
                 ct.ThrowIfCancellationRequested();
-                await file.WriteAsync(buffer.AsMemory(0, n), ct).ConfigureAwait(false);
-                onBytes(n, total);
+                await file.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+                onBytes(read, total);
             }
         }
 

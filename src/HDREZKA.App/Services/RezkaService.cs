@@ -155,7 +155,7 @@ public sealed class RezkaService
 
     private static void LogPersonAttempt(string mirror, string outcome)
     {
-        try { App.TryLog(new Exception($"[Person] mirror={mirror} {outcome}")); } catch { }
+        try { Log.Info($"[Person] mirror={mirror} {outcome}"); } catch { }
     }
 
     public string ErrorText(RezkaException ex) => ex.Kind switch
@@ -163,6 +163,8 @@ public sealed class RezkaService
         RezkaError.LoginRequired => Loc.Get("Error.LoginRequired"),
         RezkaError.MirrorBanned => Loc.Get("Error.MirrorBanned"),
         RezkaError.AccessDenied => Loc.Get("Error.AccessDenied"),
+        RezkaError.NotFound => Loc.Get("Error.NotFound"),
+        RezkaError.InsecureMirror => Loc.Get("Error.InsecureMirror"),
         RezkaError.Parse => Loc.Get("Error.Parse"),
         _ => Loc.Get("Error.Network"),
     };

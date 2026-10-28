@@ -58,7 +58,8 @@ public static class Parsers
         return rel.Length == 0 ? null : rel;
     }
 
-    internal static string? NumericId(string? cleanPath)
+    /// <summary>Числовой id из пути вида "films/9845-name.html" -> "9845".</summary>
+    public static string? NumericId(string? cleanPath)
     {
         if (string.IsNullOrEmpty(cleanPath)) return null;
         var seg = cleanPath.Split('/').LastOrDefault() ?? "";

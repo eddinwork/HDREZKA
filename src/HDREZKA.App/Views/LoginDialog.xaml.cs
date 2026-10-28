@@ -52,7 +52,7 @@ public sealed partial class LoginDialog : ContentDialog
                 CloseButtonText = "OK",
                 XamlRoot = XamlRoot,
             };
-            if (ex.Kind is RezkaError.AccessDenied or RezkaError.MirrorBanned)
+            if (ex.Kind is RezkaError.AccessDenied or RezkaError.MirrorBanned or RezkaError.InsecureMirror)
             {
                 dialog.SecondaryButtonText = Loc.Get("Settings.AutoMirror");
                 if (await dialog.ShowAsync() == ContentDialogResult.Secondary)
