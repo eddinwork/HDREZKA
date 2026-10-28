@@ -13,6 +13,7 @@ public sealed partial class SearchPage : Page
     private int _page = 1;
     private bool _hasMore = true;
     private bool _loading;
+    private bool _mirrorRecovered;
 
     public SearchPage()
     {
@@ -74,6 +75,16 @@ public sealed partial class SearchPage : Page
         }
         catch (RezkaException ex)
         {
+            if (!_mirrorRecovered && ex.Kind is RezkaError.Network or RezkaError.AccessDenied or RezkaError.MirrorBanned)
+            {
+                _mirrorRecovered = true;
+                if (await MirrorRecovery.TryRecoverAsync())
+                {
+                    DispatcherQueue.TryEnqueue(() => _ = LoadAsync());
+                    return;
+                }
+            }
+
             StateText.Text = RezkaService.Instance.ErrorText(ex);
             LoadingRing.IsActive = false;
             RetryButton.Visibility = Visibility.Visible;

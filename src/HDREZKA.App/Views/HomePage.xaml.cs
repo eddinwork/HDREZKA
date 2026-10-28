@@ -3,7 +3,6 @@ using HDREZKA.App.Services;
 using HDREZKA.Core.Api;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Navigation;
 
 namespace HDREZKA.App.Views;
@@ -17,6 +16,7 @@ public sealed partial class HomePage : Page
     private readonly Dictionary<string, bool> _sectionHasContent = new(StringComparer.OrdinalIgnoreCase);
 
     private bool _loaded;
+    private bool _mirrorRecovered;
     private readonly List<MovieSimple> _heroItems = new();
     private int _heroIndex;
     private readonly DispatcherTimer _heroTimer = new() { Interval = TimeSpan.FromSeconds(6) };
@@ -148,8 +148,19 @@ public sealed partial class HomePage : Page
         }
         catch (RezkaException ex)
         {
+            // 403/бан/сеть: одна попытка молча сменить зеркало и перезагрузиться.
+            if (!_mirrorRecovered && ex.Kind is RezkaError.Network or RezkaError.AccessDenied or RezkaError.MirrorBanned)
+            {
+                _mirrorRecovered = true;
+                if (await MirrorRecovery.TryRecoverAsync())
+                {
+                    Load();
+                    return;
+                }
+            }
+
             ShowError(RezkaService.Instance.ErrorText(ex),
-                ex.Kind is RezkaError.MirrorBanned or RezkaError.AccessDenied);
+                ex.Kind is RezkaError.MirrorBanned or RezkaError.AccessDenied or RezkaError.Network);
         }
     }
 
@@ -216,16 +227,16 @@ public sealed partial class HomePage : Page
         HeroTitle.Text = movie.Name ?? "";
         HeroDetails.Text = movie.Details ?? "";
 
-        if (!string.IsNullOrEmpty(movie.Poster) && Uri.TryCreate(movie.Poster, UriKind.Absolute, out var uri))
+        if (!string.IsNullOrEmpty(movie.Poster))
         {
-            var image = new BitmapImage(uri);
-            HeroPoster.Source = image;
-            HeroBackdrop.Source = image;
+            // Через общий кэш: раньше герой каждый раз качал постер заново.
+            PosterCache.SetSource(HeroPoster, movie.Poster);
+            PosterCache.SetSource(HeroBackdrop, movie.Poster);
         }
         else
         {
-            HeroPoster.Source = null;
-            HeroBackdrop.Source = null;
+            PosterCache.SetSource(HeroPoster, null);
+            PosterCache.SetSource(HeroBackdrop, null);
         }
 
         if (movie.Rating is { } rating)
@@ -340,7 +351,6 @@ public sealed partial class HomePage : Page
         ContinueRow.Children.Clear();
 
         var items = PositionService.Instance.GetAll()
-            .Where(p => !ContinueWatchingPage.IsLocalTestEntry(p.MovieId, p.Title))
             .Take(HomeContinueCount)
             .Select(ContinueWatchingPage.FromLocal)
             .ToList();
@@ -551,8 +561,11 @@ public sealed partial class HomePage : Page
         {
             return await task;
         }
-        catch (RezkaException ex) when (ex.Kind is RezkaError.Network or RezkaError.MirrorBanned)
+        catch (RezkaException ex) when (ex.Kind is RezkaError.Network or RezkaError.MirrorBanned
+            or RezkaError.AccessDenied or RezkaError.LoginRequired)
         {
+            // 403 и «нужен вход» нельзя превращать в пустой список: пользователь
+            // получал пустую главную без сообщения и без кнопки смены зеркала.
             throw;
         }
         catch
@@ -568,7 +581,8 @@ public sealed partial class HomePage : Page
         {
             return await task;
         }
-        catch (RezkaException ex) when (ex.Kind is RezkaError.Network or RezkaError.MirrorBanned)
+        catch (RezkaException ex) when (ex.Kind is RezkaError.Network or RezkaError.MirrorBanned
+            or RezkaError.AccessDenied or RezkaError.LoginRequired)
         {
             throw;
         }

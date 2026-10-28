@@ -27,6 +27,7 @@ public sealed partial class CatalogPage : Page
     private int _page = 1;
     private bool _hasMore = true;
     private bool _loading;
+    private bool _mirrorRecovered;
 
     public CatalogPage()
     {
@@ -185,6 +186,16 @@ public sealed partial class CatalogPage : Page
         }
         catch (RezkaException ex)
         {
+            if (!_mirrorRecovered && ex.Kind is RezkaError.Network or RezkaError.AccessDenied or RezkaError.MirrorBanned)
+            {
+                _mirrorRecovered = true;
+                if (await MirrorRecovery.TryRecoverAsync())
+                {
+                    DispatcherQueue.TryEnqueue(() => _ = LoadAsync());
+                    return;
+                }
+            }
+
             ShowState(true, RezkaService.Instance.ErrorText(ex), showRetry: true);
         }
         finally

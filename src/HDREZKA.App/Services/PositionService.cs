@@ -26,6 +26,10 @@ public sealed class PositionService
 
     public static PositionService Instance { get; } = new();
 
+    // Историю читает и фон (SeedFromHistory при проверке обновлений сериалов),
+    // а пишет UI — поэтому доступ к словарям синхронизирован.
+    private readonly object _lock = new();
+
     private Dictionary<string, WatchPosition> _positions = new();
     private HashSet<string> _watched = new();
 
@@ -40,70 +44,107 @@ public sealed class PositionService
 
     public WatchPosition? Get(string movieId, string translatorId, string? season, string? episode)
     {
-        _positions.TryGetValue(Key(movieId, translatorId, season, episode), out var pos);
-        return pos;
+        lock (_lock)
+        {
+            _positions.TryGetValue(Key(movieId, translatorId, season, episode), out var pos);
+            return pos;
+        }
     }
 
-    public IReadOnlyList<WatchPosition> GetAll() =>
-        _positions.Values
-            .Where(p => p is { DurationSeconds: > 60, PositionSeconds: > 30 } &&
-                        p.PositionSeconds < p.DurationSeconds - 30)
-            .OrderByDescending(p => p.UpdatedAt)
-            .ToList();
+    public IReadOnlyList<WatchPosition> GetAll()
+    {
+        lock (_lock)
+        {
+            return _positions.Values
+                .Where(p => p is { DurationSeconds: > 60, PositionSeconds: > 30 } &&
+                            p.PositionSeconds < p.DurationSeconds - 30)
+                .OrderByDescending(p => p.UpdatedAt)
+                .ToList();
+        }
+    }
 
     public void Save(WatchPosition position)
     {
-        _positions[Key(position.MovieId, position.TranslatorId, position.SeasonId, position.EpisodeId)] = position;
-        Persist();
+        lock (_lock)
+        {
+            _positions[Key(position.MovieId, position.TranslatorId, position.SeasonId, position.EpisodeId)] = position;
+            Persist();
+        }
     }
 
     public void Remove(string movieId)
     {
-        var keys = _positions
-            .Where(kv => kv.Value.MovieId == movieId || kv.Value.PagePath == movieId)
-            .Select(kv => kv.Key)
-            .ToList();
-        foreach (var key in keys)
+        lock (_lock)
         {
-            _positions.Remove(key);
-        }
+            var keys = _positions
+                .Where(kv => kv.Value.MovieId == movieId || kv.Value.PagePath == movieId)
+                .Select(kv => kv.Key)
+                .ToList();
+            foreach (var key in keys)
+            {
+                _positions.Remove(key);
+            }
 
-        if (keys.Count > 0) Persist();
+            if (keys.Count > 0) Persist();
 
-        // Drop manual "watched" checkmarks for the same title.
-        var watchedKeys = _watched
-            .Where(k => k.Split('|')[0] == movieId)
-            .ToList();
-        if (watchedKeys.Count > 0)
-        {
-            foreach (var key in watchedKeys) _watched.Remove(key);
-            PersistWatched();
+            // Drop manual "watched" checkmarks for the same title.
+            var watchedKeys = _watched
+                .Where(k => k.Split('|')[0] == movieId)
+                .ToList();
+            if (watchedKeys.Count > 0)
+            {
+                foreach (var key in watchedKeys) _watched.Remove(key);
+                PersistWatched();
+            }
         }
     }
 
     // ---------- manual "watched" checkmarks (offline, per voice/season/episode) ----------
 
-    public bool IsWatched(string movieId, string translatorId, string? season, string? episode) =>
-        _watched.Contains(Key(movieId, translatorId, season, episode));
+    public bool IsWatched(string movieId, string translatorId, string? season, string? episode)
+    {
+        lock (_lock)
+        {
+            return _watched.Contains(Key(movieId, translatorId, season, episode));
+        }
+    }
 
     /// <returns>New state.</returns>
     public bool ToggleWatched(string movieId, string translatorId, string? season, string? episode)
     {
-        var key = Key(movieId, translatorId, season, episode);
-        bool now;
-        if (_watched.Contains(key))
+        lock (_lock)
         {
-            _watched.Remove(key);
-            now = false;
-        }
-        else
-        {
-            _watched.Add(key);
-            now = true;
-        }
+            var key = Key(movieId, translatorId, season, episode);
+            bool now;
+            if (_watched.Contains(key))
+            {
+                _watched.Remove(key);
+                now = false;
+            }
+            else
+            {
+                _watched.Add(key);
+                now = true;
+            }
 
-        PersistWatched();
-        return now;
+            PersistWatched();
+            return now;
+        }
+    }
+
+    /// <summary>
+    /// Idempotent "watched" mark: used when an episode/film plays to the end.
+    /// Unlike <see cref="ToggleWatched"/> it never clears an existing mark.
+    /// </summary>
+    public void MarkWatched(string movieId, string translatorId, string? season, string? episode)
+    {
+        lock (_lock)
+        {
+            if (_watched.Add(Key(movieId, translatorId, season, episode)))
+            {
+                PersistWatched();
+            }
+        }
     }
 
     private void LoadWatched()

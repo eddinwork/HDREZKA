@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
+using HDREZKA.Core.Api;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -11,7 +13,13 @@ public sealed record MirrorProbeResult(string Url, bool Ok, long LatencyMs);
 /// <summary>
 /// Automatic mirror selection: candidates come from mirrors.json in the
 /// repo (updatable without a release), with a hardcoded fallback.
-/// The fastest mirror that returns a real site page wins.
+///
+/// Правила, которые важны для гео-блокировок (частые 403 у пользователей из UA):
+///  * зеркало считается рабочим только если отдаёт НАСТОЯЩУЮ страницу сайта
+///    (маркеры каталога), а не заглушку/капчу с кодом 200;
+///  * зеркала региона пользователя проверяются первыми;
+///  * если сохранённое зеркало перестало работать, приложение само
+///    переключается на рабочее (кроме залогиненных — их смена разлогинит).
 /// NOTE: cookies are domain-bound, so switching mirrors logs the user out.
 /// </summary>
 public static class MirrorService
@@ -19,16 +27,16 @@ public static class MirrorService
     public const string RemoteMirrorsUrl = "https://raw.githubusercontent.com/eddinwork/HDREZKA/main/mirrors.json";
     public const string RedirectMirror = "https://rzk.link/";
 
-    private static readonly string[] FallbackMirrors =
+    private static readonly MirrorEntry[] FallbackMirrors =
     [
-        "https://hdrzk.org/",
-        "https://rezka.ag/",
-        "https://rezka.fi/",
-        "https://hdrezka.ag/",
-        "https://hdrezka.me/",
-        "https://rezkify.com/",
-        "https://rezka-kz.tv/",
-        "https://rezka-ua.net/",
+        new("https://hdrzk.org/", MirrorCatalog.AllRegions, "default"),
+        new("https://rezka.ag/", MirrorCatalog.AllRegions, "main"),
+        new("https://rezka.fi/", MirrorCatalog.AllRegions, "main alt domain"),
+        new("https://hdrezka.ag/", MirrorCatalog.AllRegions, "main alt"),
+        new("https://hdrezka.me/", MirrorCatalog.AllRegions, "alt"),
+        new("https://rezkify.com/", MirrorCatalog.AllRegions, "alt"),
+        new("https://rezka-kz.tv/", "KZ", "kazakhstan"),
+        new("https://rezka-ua.net/", "UA", "ukraine"),
     ];
 
     private static readonly HttpClient ProbeHttp = new(new HttpClientHandler
@@ -41,87 +49,129 @@ public static class MirrorService
         Timeout = TimeSpan.FromSeconds(10),
     };
 
+    private static readonly SemaphoreSlim CatalogGate = new(1, 1);
+    private static IReadOnlyList<MirrorEntry> _catalog = [];
+    private static DateTime _catalogFetchedUtc = DateTime.MinValue;
+    private static TimeSpan _catalogTtl = TimeSpan.FromHours(6);
+
+    /// <summary>ISO 3166-1 alpha-2 страны пользователя (например, "UA"), либо null.</summary>
+    public static string? UserRegion { get; } = DetectRegion();
+
     static MirrorService()
     {
-        ProbeHttp.DefaultRequestHeaders.UserAgent.ParseAdd("HDREZKA/1.0.0 (Windows; WinUI)");
+        ProbeHttp.DefaultRequestHeaders.UserAgent.ParseAdd(BuildInfo.UserAgent);
     }
 
-    private static bool SameMirror(string a, string b) =>
-        string.Equals(a.Trim().TrimEnd('/'), b.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
-
-    // ---------- candidates ----------
-
-    public static async Task<IReadOnlyList<string>> GetCandidatesAsync(CancellationToken ct = default)
-    {
-        var list = new List<string>();
-
-        // Current setting first: never lose a working custom mirror.
-        var current = SettingsService.Instance.Mirror?.Trim() ?? "";
-        if (current.Length > 0)
-        {
-            if (!current.EndsWith('/')) current += '/';
-            list.Add(current);
-        }
-
-        var remote = await FetchRemoteListAsync(ct).ConfigureAwait(false);
-        list.AddRange(remote.Count > 0 ? remote : FallbackMirrors);
-
-        // Redirect service may point at a region-specific working mirror.
-        var resolved = await ResolveRedirectAsync(ct).ConfigureAwait(false);
-        if (resolved != null) list.Add(resolved);
-
-        // Dedupe by host, keep order (current first).
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var result = new List<string>();
-        foreach (var u in list)
-        {
-            try
-            {
-                var host = new Uri(u).Host;
-                if (seen.Add(host)) result.Add(u.EndsWith('/') ? u : u + '/');
-            }
-            catch
-            {
-                // skip malformed
-            }
-        }
-
-        return result;
-    }
-
-    private static async Task<IReadOnlyList<string>> FetchRemoteListAsync(CancellationToken ct)
+    private static string? DetectRegion()
     {
         try
         {
-            using var resp = await ProbeHttp.GetAsync(RemoteMirrorsUrl, ct).ConfigureAwait(false);
-            if (!resp.IsSuccessStatusCode) return [];
-            var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            using var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.TryGetProperty("mirrors", out var arr) || arr.ValueKind != JsonValueKind.Array)
-                return [];
-            var urls = new List<string>();
-            foreach (var item in arr.EnumerateArray())
+            var code = new Windows.Globalization.GeographicRegion().Code;
+            if (!string.IsNullOrWhiteSpace(code) && !code.Equals("ZZ", StringComparison.OrdinalIgnoreCase))
             {
-                if (item.ValueKind == JsonValueKind.String)
-                {
-                    var u = item.GetString()?.Trim();
-                    if (!string.IsNullOrEmpty(u)) urls.Add(u.EndsWith('/') ? u : u + '/');
-                }
-                else if (item.ValueKind == JsonValueKind.Object &&
-                         item.TryGetProperty("url", out var urlEl) &&
-                         urlEl.GetString() is { } u && u.Trim().Length > 0)
-                {
-                    u = u.Trim();
-                    urls.Add(u.EndsWith('/') ? u : u + '/');
-                }
+                return code.ToUpperInvariant();
             }
-
-            return urls;
         }
         catch
         {
-            return [];
+            // fall through to .NET region info
         }
+
+        try
+        {
+            var iso = System.Globalization.RegionInfo.CurrentRegion.TwoLetterISORegionName;
+            if (!string.IsNullOrWhiteSpace(iso) && !iso.Equals("ZZ", StringComparison.OrdinalIgnoreCase))
+            {
+                return iso.ToUpperInvariant();
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
+    // ---------- candidates ----------
+
+    private static async Task<IReadOnlyList<MirrorEntry>> GetCatalogAsync(CancellationToken ct)
+    {
+        if (_catalog.Count > 0 && DateTime.UtcNow - _catalogFetchedUtc < _catalogTtl)
+        {
+            return _catalog;
+        }
+
+        await CatalogGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_catalog.Count > 0 && DateTime.UtcNow - _catalogFetchedUtc < _catalogTtl)
+            {
+                return _catalog;
+            }
+
+            var json = await FetchRemoteJsonAsync(ct).ConfigureAwait(false);
+            var remote = MirrorCatalog.Parse(json);
+
+            // Fallback-зеркала полезны и когда remote-список получен:
+            // он может быть неполным или отставать от релиза.
+            var merged = new List<MirrorEntry>(remote);
+            var hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in merged)
+            {
+                if (Uri.TryCreate(entry.Url, UriKind.Absolute, out var uri)) hosts.Add(uri.Host);
+            }
+
+            foreach (var fallback in FallbackMirrors)
+            {
+                if (Uri.TryCreate(fallback.Url, UriKind.Absolute, out var uri) && hosts.Add(uri.Host))
+                {
+                    merged.Add(fallback);
+                }
+            }
+
+            _catalog = merged;
+            _catalogFetchedUtc = DateTime.UtcNow;
+            // Ошибка сети: не долбим GitHub на каждый вызов, но и не кэшируем на 6 часов.
+            _catalogTtl = remote.Count > 0 ? TimeSpan.FromHours(6) : TimeSpan.FromMinutes(10);
+            return _catalog;
+        }
+        finally
+        {
+            CatalogGate.Release();
+        }
+    }
+
+    private static async Task<string?> FetchRemoteJsonAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(8));
+            using var resp = await ProbeHttp.GetAsync(RemoteMirrorsUrl, timeout.Token).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode) return null;
+            return await resp.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public static async Task<IReadOnlyList<string>> GetCandidatesAsync(CancellationToken ct = default)
+    {
+        var catalog = await GetCatalogAsync(ct).ConfigureAwait(false);
+
+        // Регион пользователя → ALL → остальные → текущее кастомное зеркало.
+        var list = MirrorCatalog.Order(catalog, SettingsService.Instance.Mirror, UserRegion).ToList();
+
+        // Redirect-сервис может указывать на регионально доступное зеркало.
+        var resolved = await ResolveRedirectAsync(ct).ConfigureAwait(false);
+        if (resolved != null && !list.Any(u => MirrorCatalog.SameMirror(u, resolved)))
+        {
+            list.Add(resolved);
+        }
+
+        return list;
     }
 
     private static async Task<string?> ResolveRedirectAsync(CancellationToken ct)
@@ -153,11 +203,12 @@ public static class MirrorService
         // mirrors accept different variants (same as the 403-flip retry).
         foreach (var android in new[] { true, false })
         {
-            var sw = System.Diagnostics.Stopwatch.StartNew();
+            if (ct.IsCancellationRequested) break;
+            var sw = Stopwatch.StartNew();
             try
             {
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
-                req.Headers.Accept.ParseAdd("text/html");
+                req.Headers.Accept.ParseAdd("text/html,application/xhtml+xml");
                 if (android)
                 {
                     req.Headers.Add("X-Hdrezka-Android-App", "1");
@@ -169,10 +220,13 @@ public static class MirrorService
                 if (!resp.IsSuccessStatusCode) return new MirrorProbeResult(url, false, 0);
                 var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
                 sw.Stop();
-                // Real site layout marker (see Parsers.CheckDocument: #wrapper).
-                if (body.Contains("wrapper", StringComparison.OrdinalIgnoreCase))
-                    return new MirrorProbeResult(url, true, sw.ElapsedMilliseconds);
-                return new MirrorProbeResult(url, false, 0);
+
+                // ВАЖНО: код 200 ещё не значит «зеркало работает». Заглушки,
+                // капча и страница «Вход на HDrezka» приходят с 200, поэтому
+                // проверяем реальную разметку сайта (старый чек по подстроке
+                // "wrapper" пропускал такие страницы).
+                var ok = Parsers.LooksLikeSite(body);
+                return new MirrorProbeResult(url, ok, ok ? sw.ElapsedMilliseconds : 0);
             }
             catch
             {
@@ -183,11 +237,16 @@ public static class MirrorService
         return new MirrorProbeResult(url, false, 0);
     }
 
-    public static async Task<IReadOnlyList<MirrorProbeResult>> ProbeAllAsync(IEnumerable<string> urls, CancellationToken ct = default)
+    /// <summary>
+    /// Проверяет зеркала параллельно. Порядок результата = порядок входных
+    /// URL, а не «самый быстрый»: приоритет региона важнее миллисекунд.
+    /// </summary>
+    public static async Task<IReadOnlyList<MirrorProbeResult>> ProbeAllAsync(
+        IEnumerable<string> urls, CancellationToken ct = default)
     {
         var tasks = urls.Select(u => ProbeAsync(u, ct)).ToList();
         var results = await Task.WhenAll(tasks).ConfigureAwait(false);
-        return results.OrderBy(r => !r.Ok).ThenBy(r => r.LatencyMs).ToList();
+        return results;
     }
 
     public static async Task<string?> PickBestAsync(CancellationToken ct = default)
@@ -209,33 +268,137 @@ public static class MirrorService
     // ---------- flows ----------
 
     /// <summary>
-    /// First-launch autopick. Silent, never throws, never touches a
-    /// logged-in session (mirror switch would log the user out).
+    /// Проверяет сохранённое зеркало и, если оно перестало отдавать реальную
+    /// страницу, молча переключается на рабочее. Возвращает новое зеркало
+    /// или null, если всё в порядке / переключение невозможно.
+    /// Залогиненных не трогаем: смена домена = потеря сессии.
     /// </summary>
-    public static async Task AutoPickOnStartupAsync()
+    /// <param name="contentPath">
+    /// Конкретная страница, на которой пользователь получил ошибку (например,
+    /// путь фильма). Бывает, что главная открывается, а глубокие страницы
+    /// отдают 403 — тогда проверяем именно её.
+    /// </param>
+    public static async Task<string?> EnsureWorkingMirrorAsync(
+        string? contentPath = null, CancellationToken ct = default)
+    {
+        try
+        {
+            var current = SettingsService.Instance.Mirror;
+            if (string.IsNullOrWhiteSpace(current)) return null;
+
+            var rootOk = (await ProbeAsync(current, ct).ConfigureAwait(false)).Ok;
+            if (rootOk && (contentPath == null || await ProbeContentAsync(current, contentPath, ct).ConfigureAwait(false)))
+            {
+                return null;
+            }
+
+            LogMirror($"current {current} failed probe (root={rootOk} content={contentPath ?? "-"})");
+
+            // Кандидаты проверяем в приоритетном порядке (регион → ALL → …)
+            // и берём первый, который реально отдаёт нужную страницу.
+            var candidates = await GetCandidatesAsync(ct).ConfigureAwait(false);
+            var results = await ProbeAllAsync(candidates, ct).ConfigureAwait(false);
+
+            string? best = null;
+            foreach (var result in results.Where(r => r.Ok).Take(4))
+            {
+                if (contentPath != null && !await ProbeContentAsync(result.Url, contentPath, ct).ConfigureAwait(false))
+                {
+                    continue;
+                }
+
+                best = result.Url;
+                break;
+            }
+
+            if (best == null || MirrorCatalog.SameMirror(best, current)) return null;
+
+            if (RezkaService.Instance.IsLoggedIn)
+            {
+                LogMirror("switch skipped: user is logged in");
+                return null;
+            }
+
+            ApplyMirror(best);
+            LogMirror($"switched {current} -> {best}");
+            return best;
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Проверяет конкретную страницу на конкретном зеркале. Нужна, потому что
+    /// 403 бывает избирательным: главная открывается, а страница фильма — нет.
+    /// </summary>
+    private static async Task<bool> ProbeContentAsync(string mirror, string path, CancellationToken ct)
+    {
+        try
+        {
+            var url = new Uri(new Uri(mirror), path.TrimStart('/')).ToString();
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Accept.ParseAdd("text/html,application/xhtml+xml");
+            req.Headers.Add("X-Hdrezka-Android-App", "1");
+            req.Headers.Add("X-Hdrezka-Android-App-Version", "2.2.2");
+
+            using var resp = await ProbeHttp.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode) return false;
+            var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            return Parsers.LooksLikeSite(body) && !body.Contains("id=\"check-form\"", StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// First-launch autopick + regular health check on every launch.
+    /// Silent, never throws. Logged-in sessions are only autopicked once
+    /// (switching would log the user out).
+    /// </summary>
+    public static async Task EnsureOnStartupAsync()
     {
         try
         {
             var settings = SettingsService.Instance;
-            if (settings.MirrorAutoPicked) return;
-            if (RezkaService.Instance.IsLoggedIn)
-            {
-                settings.MirrorAutoPicked = true;
-                settings.Save();
-                return;
-            }
-
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(45));
-            var best = await PickBestAsync(cts.Token).ConfigureAwait(false);
-            if (best == null)
+
+            if (!settings.MirrorAutoPicked)
             {
-                // Offline? Retry on next launch.
+                if (RezkaService.Instance.IsLoggedIn)
+                {
+                    settings.MirrorAutoPicked = true;
+                    settings.Save();
+                    return;
+                }
+
+                var best = await PickBestAsync(cts.Token).ConfigureAwait(false);
+                if (best == null)
+                {
+                    // Offline? Retry on next launch.
+                    return;
+                }
+
+                settings.MirrorAutoPicked = true;
+                if (!MirrorCatalog.SameMirror(best, settings.Mirror)) ApplyMirror(best);
+                else settings.Save();
                 return;
             }
 
-            settings.MirrorAutoPicked = true;
-            if (!SameMirror(best, settings.Mirror)) ApplyMirror(best);
-            else settings.Save();
+            // Зеркало уже выбиралось, но гео-блокировки меняются: проверяем,
+            // что сохранённое зеркало всё ещё отдаёт настоящую страницу.
+            if (!RezkaService.Instance.IsLoggedIn)
+            {
+                await EnsureWorkingMirrorAsync(ct: cts.Token).ConfigureAwait(false);
+            }
         }
         catch
         {
@@ -256,7 +419,7 @@ public static class MirrorService
         if (best == null) return null;
 
         var current = SettingsService.Instance.Mirror;
-        if (SameMirror(best, current))
+        if (MirrorCatalog.SameMirror(best, current))
         {
             SettingsService.Instance.LastMirrorCheckUtc = DateTime.UtcNow;
             SettingsService.Instance.Save();
@@ -296,5 +459,10 @@ public static class MirrorService
 
         ApplyMirror(best);
         return best;
+    }
+
+    private static void LogMirror(string message)
+    {
+        try { App.TryLog(new Exception("[Mirror] " + message)); } catch { }
     }
 }

@@ -22,6 +22,15 @@ public sealed class SettingsService
         WriteIndented = true,
     };
 
+    /// <summary>
+    /// Сериализация и запись идут из нескольких потоков (UI, HTTP-колбэк
+    /// HeadersFlipped, фоновые проверки сериалов), поэтому запись защищена
+    /// блокировкой и выполняется атомарно через временный файл.
+    /// </summary>
+    private static readonly object SaveLock = new();
+    private static Timer? _debounceTimer;
+    private static readonly TimeSpan SaveDebounce = TimeSpan.FromMilliseconds(800);
+
     public string Mirror { get; set; } = "https://hdrzk.org/";
 
     /// <summary>First-launch mirror autopick already performed.</summary>
@@ -119,8 +128,37 @@ public sealed class SettingsService
 
     public void Save()
     {
-        Directory.CreateDirectory(Dir);
-        File.WriteAllText(FilePath, JsonSerializer.Serialize(this, JsonOpts));
+        lock (SaveLock)
+        {
+            try
+            {
+                Directory.CreateDirectory(Dir);
+                var json = JsonSerializer.Serialize(this, JsonOpts);
+
+                // Пишем во временный файл и подменяем: падение/выключение
+                // посреди записи больше не оставляет обрезанный settings.json.
+                var tmp = FilePath + ".tmp";
+                File.WriteAllText(tmp, json);
+                File.Move(tmp, FilePath, overwrite: true);
+            }
+            catch (Exception ex)
+            {
+                App.TryLog(ex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Отложенная запись для частых изменений (громкость, слайдеры):
+    /// вместо файлового I/O на каждое событие — одна запись через 0.8 с.
+    /// </summary>
+    public void ScheduleSave()
+    {
+        lock (SaveLock)
+        {
+            _debounceTimer ??= new Timer(_ => Save(), null, Timeout.Infinite, Timeout.Infinite);
+            _debounceTimer.Change((int)SaveDebounce.TotalMilliseconds, Timeout.Infinite);
+        }
     }
 
     public void Load()

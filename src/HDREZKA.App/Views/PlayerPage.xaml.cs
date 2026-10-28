@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using HDREZKA.App.Services;
 using HDREZKA.Core.Api;
 using Microsoft.UI.Dispatching;
@@ -31,6 +31,15 @@ public sealed partial class PlayerPage : Page
     private MovieVideo? _video;
     private string _quality = "";
     private bool _isPinned;
+
+    /// <summary>
+    /// Очередь «качество + CDN-ссылка»: раньше брался только Urls[0], и один
+    /// недоступный узел CDN давал «ошибку сети» при живом сайте. Теперь при
+    /// сбое плеер сам пробует остальные ссылки и качества.
+    /// </summary>
+    private readonly List<(string Quality, string Url)> _candidates = new();
+    private int _candidateIndex;
+    private bool _mirrorRecovered;
 
     // Keeps the PC awake while video is playing (display + sleep).
     private Windows.System.Display.DisplayRequest? _displayRequest;
@@ -70,7 +79,6 @@ public sealed partial class PlayerPage : Page
 
     /// <summary>Last known duration (for seek preview while dragging).</summary>
     private long _lastTotalMs;
-    private bool _endReached;
     private long _pendingSeekMs;
     private DateTime _lastTimeChanged = DateTime.MinValue;
     private int _wasMuted;
@@ -247,6 +255,7 @@ public sealed partial class PlayerPage : Page
         ToolTipService.SetToolTip(ZoomButton, Loc.Get("Player.Zoom"));
         ToolTipService.SetToolTip(ExternalButton, Loc.Get("Player.External"));
         ToolTipService.SetToolTip(PinButton, Loc.Get("Player.Pin"));
+        ToolTipService.SetToolTip(MinimizeButton, Loc.Get("Player.Minimize"));
         ToolTipService.SetToolTip(CloseButton, Loc.Get("Player.Close"));
         MirrorButton.Content = Loc.Get("Settings.AutoMirror");
     }
@@ -289,6 +298,53 @@ public sealed partial class PlayerPage : Page
         _isPinned = !_isPinned;
         ApplyPin();
     }
+
+    /// <summary>
+    /// Окно плеера без системного тайтл-бара, поэтому системной кнопки
+    /// «свернуть» нет — она своя, в верхней панели.
+    /// </summary>
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+    {
+        ReturnFocus();
+        if (_isFullscreen) ExitFullscreen();
+
+        var window = Host;
+        if (window == null) return;
+        try
+        {
+            if (window.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
+            {
+                presenter.Minimize();
+            }
+            else
+            {
+                MinimizeNative(window);
+            }
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+            MinimizeNative(window);
+        }
+    }
+
+    private static void MinimizeNative(Window window)
+    {
+        try
+        {
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+            ShowWindow(hwnd, SwMinimize);
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+    }
+
+    private const int SwMinimize = 6;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
@@ -378,59 +434,37 @@ public sealed partial class PlayerPage : Page
             _quality = track.Quality;
             BuildQualityBox();
             BuildSubtitlesBox(_video);
+            BuildCandidates();
 
-            long seekMs;
-            if (seekToSaved)
+            if (_candidates.Count == 0)
             {
-                seekMs = GetSavedPositionMs();
-            }
-            else if (_player != null)
-            {
-                seekMs = (long)_player.PlaybackSession.Position.TotalMilliseconds;
-            }
-            else
-            {
-                seekMs = 0;
+                ShowStatus(Loc.Get("Details.NoVideo"));
+                return;
             }
 
-            _pendingSeekMs = seekMs;
-            var streamUrl = track.Urls[0];
-            App.TryLog(new Exception($"[Player] Track: {track.Quality} urls={track.Urls.Count} account={track.NeedAccount} premium={track.NeedPremium}"));
-            App.TryLog(new Exception($"[Player] Stream URL: {streamUrl}"));
-
-            MediaSource source;
-            if (streamUrl.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase))
-            {
-                var hls = await AdaptiveMediaSource.CreateFromUriAsync(new Uri(streamUrl));
-                if (hls.Status != AdaptiveMediaSourceCreationStatus.Success || hls.MediaSource == null)
-                {
-                    throw new RezkaException(RezkaError.Parse, "HLS failed: " + hls.Status);
-                }
-
-                source = MediaSource.CreateFromAdaptiveMediaSource(hls.MediaSource);
-            }
-            else
-            {
-                source = MediaSource.CreateFromUri(new Uri(streamUrl));
-            }
-
-            _currentSource = source;
-            _mediaOpened = false;
-            var gen = ++_loadGen;
-
-            _playbackItem = new MediaPlaybackItem(source);
-            var player = _player;
-            if (player == null) return;
-            player.Source = _playbackItem;
-            // Setting Source resets PlaybackRate to 1x: re-apply saved speed,
-            // otherwise UI shows 2x while video plays at 1x.
-            ApplySpeed();
-            App.TryLog(new Exception($"[Player] Source set, pending seek={_pendingSeekMs}"));
-            _ = WatchOpenTimeoutAsync(gen);
+            _candidateIndex = 0;
+            _pendingSeekMs = seekToSaved ? GetSavedPositionMs() : CurrentPositionMs();
+            App.TryLog(new Exception(
+                $"[Player] Candidates={_candidates.Count} first={_candidates[0].Quality} {_candidates[0].Url}"));
+            await OpenCurrentCandidateAsync();
         }
         catch (RezkaException ex)
         {
             App.TryLog(ex);
+
+            // 403/бан/сеть: одна попытка автоматически сменить зеркало.
+            // Без этого пользователь видит «ошибку сети» при живом сайте.
+            if (!_mirrorRecovered && ex.Kind is RezkaError.Network or RezkaError.AccessDenied or RezkaError.MirrorBanned)
+            {
+                _mirrorRecovered = true;
+                if (await MirrorRecovery.TryRecoverAsync(_launch.Details.Id))
+                {
+                    _switching = false;
+                    await LoadVideoAsync(seekToSaved, qualityOverride);
+                    return;
+                }
+            }
+
             ShowStatus(RezkaService.Instance.ErrorText(ex),
                 ex.Kind is RezkaError.Network or RezkaError.AccessDenied or RezkaError.MirrorBanned);
         }
@@ -442,14 +476,144 @@ public sealed partial class PlayerPage : Page
         finally
         {
             _switching = false;
-            _endReached = false;
         }
+    }
+
+    /// <summary>
+    /// Собирает очередь воспроизведения: выбранное качество первым, затем
+    /// остальные качества по убыванию, внутри качества — все CDN-ссылки.
+    /// </summary>
+    private void BuildCandidates()
+    {
+        _candidates.Clear();
+        if (_video == null) return;
+
+        var playable = _video.Videos
+            .Where(v => !v.NeedAccount && !v.NeedPremium && v.Urls.Count > 0)
+            .ToList();
+        if (playable.Count == 0) return;
+
+        var selected = playable.FirstOrDefault(v => v.Quality == _quality)
+            ?? playable.OrderByDescending(v => QualityRank(v.Quality)).First();
+
+        var ordered = playable.OrderByDescending(v => QualityRank(v.Quality)).ToList();
+
+        foreach (var track in new[] { selected }.Concat(ordered.Where(t => !ReferenceEquals(t, selected))))
+        {
+            foreach (var url in track.Urls)
+            {
+                if (string.IsNullOrWhiteSpace(url)) continue;
+                if (_candidates.Any(c => c.Url == url)) continue;
+                _candidates.Add((track.Quality, url));
+            }
+        }
+    }
+
+    private static int QualityRank(string quality)
+    {
+        var digits = new string(quality.Where(char.IsDigit).ToArray());
+        return int.TryParse(digits, out var value) ? value : 0;
+    }
+
+    /// <summary>
+    /// Показывает в ComboBox фактическое качество (после автоперебора плеер
+    /// мог уйти на другое), не вызывая повторную загрузку через SelectionChanged.
+    /// </summary>
+    private void SyncQualitySelection()
+    {
+        for (var i = 0; i < QualityBox.Items.Count; i++)
+        {
+            if (QualityBox.Items[i] is not ComboBoxItem { Tag: string tag } || tag != _quality) continue;
+
+            QualityBox.SelectionChanged -= QualityBox_SelectionChanged;
+            QualityBox.SelectedIndex = i;
+            QualityBox.SelectionChanged += QualityBox_SelectionChanged;
+            return;
+        }
+    }
+
+    private long CurrentPositionMs()
+    {
+        try
+        {
+            return _player != null ? (long)_player.PlaybackSession.Position.TotalMilliseconds : 0;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>Открывает текущую пару «качество + URL»; сбой сразу уводит к следующей.</summary>
+    private async Task OpenCurrentCandidateAsync()
+    {
+        if (_player == null || _candidateIndex < 0 || _candidateIndex >= _candidates.Count) return;
+
+        var (quality, url) = _candidates[_candidateIndex];
+        try
+        {
+            MediaSource source;
+            if (url.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase))
+            {
+                var hls = await AdaptiveMediaSource.CreateFromUriAsync(new Uri(url));
+                if (hls.Status != AdaptiveMediaSourceCreationStatus.Success || hls.MediaSource == null)
+                {
+                    throw new RezkaException(RezkaError.Parse, "HLS failed: " + hls.Status);
+                }
+
+                source = MediaSource.CreateFromAdaptiveMediaSource(hls.MediaSource);
+            }
+            else
+            {
+                source = MediaSource.CreateFromUri(new Uri(url));
+            }
+
+            if (_tearingDown || _player == null) return;
+
+            _currentSource = source;
+            _mediaOpened = false;
+            _quality = quality;
+            SyncQualitySelection();
+            var gen = ++_loadGen;
+
+            _playbackItem = new MediaPlaybackItem(source);
+            _player.Source = _playbackItem;
+            // Setting Source resets PlaybackRate to 1x: re-apply saved speed,
+            // otherwise UI shows 2x while video plays at 1x.
+            ApplySpeed();
+            App.TryLog(new Exception($"[Player] Source set q={quality} seek={_pendingSeekMs} url={url}"));
+            _ = WatchOpenTimeoutAsync(gen);
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(new Exception($"[Player] Candidate failed ({quality}): {ex.Message}"));
+            if (TryNextCandidate()) return;
+            ShowStatus(Loc.Get("Details.NoVideo"), showMirrorButton: true);
+        }
+    }
+
+    /// <summary>Переключается на следующую ссылку/качество; false — кандидаты кончились.</summary>
+    private bool TryNextCandidate()
+    {
+        if (_candidateIndex + 1 >= _candidates.Count) return false;
+
+        // Продолжаем с текущей позиции, чтобы смена узла CDN не откатывала
+        // просмотр в начало (позиция берётся из плеера, если он уже играл).
+        var resume = CurrentPositionMs();
+        if (resume > 0) _pendingSeekMs = resume;
+
+        _candidateIndex++;
+        App.TryLog(new Exception(
+            $"[Player] Next candidate {_candidateIndex + 1}/{_candidates.Count}: {_candidates[_candidateIndex].Quality}"));
+        _ = OpenCurrentCandidateAsync();
+        return true;
     }
 
     /// <summary>Offline playback: local file, no network, no qualities/subs.</summary>
     private async Task LoadLocalFileAsync(string path, bool seekToSaved)
     {
         _video = new MovieVideo([], [], false, null);
+        _candidates.Clear();
         BuildQualityBox();
         BuildSubtitlesBox(_video);
 
@@ -861,7 +1025,15 @@ public sealed partial class PlayerPage : Page
             await Task.Delay(TimeSpan.FromSeconds(20));
             if (gen != _loadGen || _mediaOpened || _player == null) return;
             App.TryLog(new Exception("[Player] Open timeout: no MediaOpened in 20s"));
-            ShowStatus(Loc.Get("Error.Network"));
+
+            // Ссылка не открылась: возможно, конкретный CDN-узел недоступен
+            // в регионе пользователя — пробуем следующую.
+            if (TryNextCandidate()) return;
+
+            // Локальный файл: зеркало тут ни при чём.
+            var local = !string.IsNullOrEmpty(_launch?.LocalFile);
+            ShowStatus(local ? Loc.Get("Player.StreamFailed") : Loc.Get("Error.Network"),
+                showMirrorButton: !local);
         }
         catch (Exception ex)
         {
@@ -1044,8 +1216,11 @@ public sealed partial class PlayerPage : Page
         _bufferStart = null;
         DispatcherQueue.TryEnqueue(async () =>
         {
-            _endReached = true;
+            // Финальная позиция + отметка «просмотрено»: раньше из-за
+            // приоритета && в SavePosition досмотренная серия не отмечалась.
             SavePosition(final: true);
+            MarkWatched();
+
             if (await TryNextEpisodeAsync(auto: true))
             {
                 return;
@@ -1055,13 +1230,41 @@ public sealed partial class PlayerPage : Page
         });
     }
 
+    /// <summary>Досмотренное до конца отмечается как просмотренное (локально).</summary>
+    private void MarkWatched()
+    {
+        if (_launch == null) return;
+        try
+        {
+            var numericId = DetailsPage.ExtractNumericId(_launch.Details.Id) ?? _launch.Details.Id;
+            PositionService.Instance.MarkWatched(
+                numericId,
+                _launch.Voice.TranslatorId,
+                _launch.Season?.SeasonId,
+                _launch.Episode?.EpisodeId);
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+    }
+
     private void OnMediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs e)
     {
         UpdateDisplayRequest(false);
         _bufferStart = null;
-        _pendingSeekMs = 0;
         App.TryLog(new Exception($"[Player] MediaFailed: {e.Error} {e.ErrorMessage} code={e.ExtendedErrorCode}"));
-        DispatcherQueue.TryEnqueue(() => ShowStatus(Loc.Get("Player.StreamFailed"), showMirrorButton: true));
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_tearingDown) return;
+
+            // Битая или заблокированная CDN-ссылка: сначала пробуем остальные
+            // ссылки/качества, и только потом показываем ошибку.
+            if (TryNextCandidate()) return;
+            _pendingSeekMs = 0;
+            var local = !string.IsNullOrEmpty(_launch?.LocalFile);
+            ShowStatus(Loc.Get("Player.StreamFailed"), showMirrorButton: !local);
+        });
     }
 
     // ---------- controls ----------
@@ -1335,7 +1538,9 @@ public sealed partial class PlayerPage : Page
         {
             _player.Volume = Math.Clamp(VolumeSlider.Value, 0, 100) / 100.0;
             SettingsService.Instance.Volume = (int)Math.Clamp(VolumeSlider.Value, 0, 100);
-            SettingsService.Instance.Save();
+            // Отложенная запись: событие приходит на каждый пиксель драга,
+            // синхронный File.WriteAllText здесь = фризы UI.
+            SettingsService.Instance.ScheduleSave();
             UpdateMuteIcon();
         }
     }
@@ -1411,7 +1616,7 @@ public sealed partial class PlayerPage : Page
 
     private void SavePosition(bool final = false)
     {
-        if (_launch == null || _player == null || _endReached && final) return;
+        if (_launch == null || _player == null) return;
         // Episode switch in flight (_launch already swapped, old player still
         // seeks): skip timer saves so stale positions don't poison the new key.
         if (_loadingEpisode && !final) return;

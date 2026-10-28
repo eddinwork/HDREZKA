@@ -1,0 +1,22 @@
+<Project>
+
+  <!--
+    Единственный источник версии приложения.
+    При выпуске релиза меняется ТОЛЬКО здесь; значение попадает в:
+      * exe/dll (AssemblyVersion / FileVersion / InformationalVersion),
+      * User-Agent HTTP-запросов (HDREZKA.Core.Api.BuildInfo),
+      * экран «Настройки» (UpdateService.CurrentVersion).
+    Вручную синхронизировать нужно ещё installer/installer.iss (MyAppVersion)
+    и README.md — они не умеют читать MSBuild-свойства.
+  -->
+  <PropertyGroup>
+    <Version>1.7.0</Version>
+    <FileVersion>1.7.0.0</FileVersion>
+    <AssemblyVersion>1.7.0.0</AssemblyVersion>
+    <InformationalVersion>1.7.0</InformationalVersion>
+    <Product>HDREZKA for Windows</Product>
+    <Company>eddinwork</Company>
+    <Copyright>Copyright (c) 2026. Portions based on HDrezka for macOS, MIT License (c) 2025 voidboost.</Copyright>
+  </PropertyGroup>
+
+</Project>

@@ -4,6 +4,10 @@ obj/
 out/
 publish/
 
+# Vendored reference sources (macOS client used as a porting reference).
+# Kept locally only: it is a separate repository, not a submodule of this one.
+/reference/
+
 # Visual Studio / Rider
 .vs/
 .idea/

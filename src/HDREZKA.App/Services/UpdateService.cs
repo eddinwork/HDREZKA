@@ -8,7 +8,11 @@ public sealed record UpdateInfo(string Version, string Url, string Notes, string
 
 public static class UpdateService
 {
-    public const string CurrentVersion = "1.6.0";
+    /// <summary>
+    /// Версия текущей сборки. Источник — Directory.Build.props
+    /// (InformationalVersion), чтобы не держать строку в трёх местах.
+    /// </summary>
+    public static string CurrentVersion => HDREZKA.Core.Api.BuildInfo.Version;
 
     private const string ReleasesApiUrl = "https://api.github.com/repos/eddinwork/HDREZKA/releases/latest";
     private const string ReleasesPageUrl = "https://github.com/eddinwork/HDREZKA/releases";

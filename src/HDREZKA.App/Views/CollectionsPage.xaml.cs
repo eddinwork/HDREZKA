@@ -16,6 +16,7 @@ public sealed partial class CollectionsPage : Page
     private bool _hasMore = true;
     private bool _loading;
     private bool _collectionsLoaded;
+    private bool _mirrorRecovered;
 
     public CollectionsPage()
     {
@@ -118,6 +119,17 @@ public sealed partial class CollectionsPage : Page
         catch (RezkaException ex)
         {
             App.TryLog(new Exception("[Collections] folders failed: " + ex.Message));
+
+            if (!_mirrorRecovered && ex.Kind is RezkaError.Network or RezkaError.AccessDenied or RezkaError.MirrorBanned)
+            {
+                _mirrorRecovered = true;
+                if (await MirrorRecovery.TryRecoverAsync())
+                {
+                    DispatcherQueue.TryEnqueue(LoadCollections);
+                    return;
+                }
+            }
+
             ShowState(true, RezkaService.Instance.ErrorText(ex), showRetry: true);
         }
         catch (Exception ex)
@@ -271,6 +283,17 @@ public sealed partial class CollectionsPage : Page
         catch (RezkaException ex)
         {
             App.TryLog(new Exception($"[Collections] items failed: id={_currentCollectionId} page={_page} {ex.Message}"));
+
+            if (!_mirrorRecovered && ex.Kind is RezkaError.Network or RezkaError.AccessDenied or RezkaError.MirrorBanned)
+            {
+                _mirrorRecovered = true;
+                if (await MirrorRecovery.TryRecoverAsync())
+                {
+                    DispatcherQueue.TryEnqueue(() => _ = LoadAsync());
+                    return;
+                }
+            }
+
             ShowState(true, RezkaService.Instance.ErrorText(ex), showRetry: true);
         }
         finally

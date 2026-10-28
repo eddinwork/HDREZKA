@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
+using HDREZKA.Core.Api;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 
@@ -14,6 +15,15 @@ public static class PosterCache
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
     private static readonly ConcurrentDictionary<string, BitmapImage> Memory = new();
+
+    // Один URL — одна загрузка, даже если его одновременно просят 5 карточек.
+    private static readonly ConcurrentDictionary<string, Task<string>> InFlight =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    // Ограничение параллелизма: GridView при быстром скролле просит десятки
+    // постеров разом, без гейта это шторм из HTTP-запросов и декодирований.
+    private static readonly SemaphoreSlim DownloadGate = new(6, 6);
+
     private const int MemoryCap = 300;
     private const long DirCapBytes = 200L * 1024 * 1024;
     private static readonly TimeSpan MaxAge = TimeSpan.FromDays(30);
@@ -24,7 +34,7 @@ public static class PosterCache
 
     static PosterCache()
     {
-        Http.DefaultRequestHeaders.UserAgent.ParseAdd("HDREZKA/1.0.0 (Windows; WinUI)");
+        Http.DefaultRequestHeaders.UserAgent.ParseAdd(BuildInfo.UserAgent);
         _ = Task.Run(CleanupAsync);
     }
 
@@ -51,7 +61,7 @@ public static class PosterCache
             string path;
             try
             {
-                path = await GetFileAsync(key).ConfigureAwait(false);
+                path = await GetFileForUrlAsync(key).ConfigureAwait(false);
             }
             catch
             {
@@ -80,6 +90,21 @@ public static class PosterCache
         });
     }
 
+    private static Task<string> GetFileForUrlAsync(string url) =>
+        InFlight.GetOrAdd(url, static key => DownloadAndForgetAsync(key));
+
+    private static async Task<string> DownloadAndForgetAsync(string url)
+    {
+        try
+        {
+            return await GetFileAsync(url).ConfigureAwait(false);
+        }
+        finally
+        {
+            InFlight.TryRemove(url, out _);
+        }
+    }
+
     private static async Task<string> GetFileAsync(string url)
     {
         Directory.CreateDirectory(Dir);
@@ -88,23 +113,48 @@ public static class PosterCache
         var name = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(url))) + ext;
         var path = Path.Combine(Dir, name);
 
-        var info = new FileInfo(path);
-        if (info.Exists && info.Length > 0 && DateTime.UtcNow - info.LastWriteTimeUtc < MaxAge)
+        if (IsFresh(path)) return path;
+
+        await DownloadGate.WaitAsync().ConfigureAwait(false);
+        try
         {
+            // Пока ждали слот, файл мог скачать соседний поток.
+            if (IsFresh(path)) return path;
+
+            using var resp = await Http.GetAsync(url).ConfigureAwait(false);
+            resp.EnsureSuccessStatusCode();
+            using var net = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false);
+
+            // Уникальный временный файл: два потока с одним ".tmp" ломали
+            // и файл, и его последующее 30-дневное кэширование.
+            var tmp = $"{path}.{Guid.NewGuid():N}.tmp";
+            try
+            {
+                using (var file = File.Create(tmp))
+                {
+                    await net.CopyToAsync(file).ConfigureAwait(false);
+                }
+
+                File.Move(tmp, path, overwrite: true);
+            }
+            catch
+            {
+                try { File.Delete(tmp); } catch { }
+                throw;
+            }
+
             return path;
         }
-
-        using var resp = await Http.GetAsync(url).ConfigureAwait(false);
-        resp.EnsureSuccessStatusCode();
-        using var net = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false);
-        var tmp = path + ".tmp";
-        using (var file = File.Create(tmp))
+        finally
         {
-            await net.CopyToAsync(file).ConfigureAwait(false);
+            DownloadGate.Release();
         }
+    }
 
-        File.Move(tmp, path, overwrite: true);
-        return path;
+    private static bool IsFresh(string path)
+    {
+        var info = new FileInfo(path);
+        return info.Exists && info.Length > 0 && DateTime.UtcNow - info.LastWriteTimeUtc < MaxAge;
     }
 
     private static async Task CleanupAsync()

@@ -504,14 +504,47 @@ public static class Parsers
         return result;
     }
 
+    /// <summary>
+    /// Отличает настоящую страницу сайта от заглушки, капчи, «Вход на HDrezka»
+    /// и прочих 200-ответов с текстом. Используется проверкой зеркал: старая
+    /// проверка по подстроке "wrapper" давала ложные срабатывания.
+    /// </summary>
+    public static bool LooksLikeSite(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return false;
+
+        IDocument doc;
+        try
+        {
+            doc = ParseHtml(html);
+        }
+        catch
+        {
+            return false;
+        }
+
+        // #wrapper есть на всех страницах сайта, но у страниц-заглушек
+        // его либо нет, либо нет характерных блоков контента.
+        if (doc.QuerySelector("#wrapper") == null) return false;
+
+        return doc.QuerySelectorAll(
+            ".b-content__inline_item, .b-content__htitle, .b-post__title, .b-post__info, .b-content__main").Length > 0;
+    }
+
     private static string AddFlag(string name, string? imgSrc)
     {
         if (string.IsNullOrEmpty(imgSrc)) return name;
         var file = imgSrc.Split('/').LastOrDefault() ?? "";
-        if (file.Contains("ua")) return name + " 🇺🇦";
-        if (file.Contains("kz")) return name + " 🇰🇿";
-        if (file.Contains("ru")) return name + " 🇷🇺";
-        return name;
+        string? code = null;
+        if (file.Contains("ua", StringComparison.OrdinalIgnoreCase)) code = "UA";
+        else if (file.Contains("kz", StringComparison.OrdinalIgnoreCase)) code = "KZ";
+        else if (file.Contains("ru", StringComparison.OrdinalIgnoreCase)) code = "RU";
+        if (code == null) return name;
+
+        // Windows-шрифты не содержат глифов флагов-эмодзи: раньше вместо флага
+        // пользователь видел «UA»/«KZ» вперемешку. Пишем код страны текстом.
+        if (name.Contains($"({code})", StringComparison.Ordinal)) return name;
+        return $"{name} ({code})";
     }
 
     internal static IReadOnlyList<MovieSimple> ParseWatchAlso(IDocument doc) =>

@@ -6,7 +6,7 @@ namespace HDREZKA.Core.Api;
 public sealed class RezkaClientOptions
 {
     public string Mirror { get; set; } = "https://hdrzk.org/";
-    public string UserAgent { get; set; } = "HDREZKA/1.0.0 (Windows; WinUI)";
+    public string UserAgent { get; set; } = BuildInfo.UserAgent;
     public bool UseAndroidHeaders { get; set; } = true;
     public string AndroidAppVersion { get; set; } = "2.2.2";
 }
@@ -220,8 +220,10 @@ public sealed class RezkaClient : IDisposable
         return path;
     }
 
+    // 404 сюда намеренно не входит: удалённый тайтл/персона не «восстановится»
+    // повтором, а каждая лишняя попытка — это +1.2 с ожидания в UI.
     private static bool IsTransient(HttpStatusCode code) =>
-        code is HttpStatusCode.NotFound or HttpStatusCode.TooManyRequests
+        code is HttpStatusCode.TooManyRequests
             or HttpStatusCode.InternalServerError or HttpStatusCode.BadGateway
             or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout;
 

@@ -79,20 +79,11 @@ public sealed partial class ContinueWatchingPage : Page
 
         foreach (var position in PositionService.Instance.GetAll())
         {
-            if (IsTestEntry(position.MovieId, position.Title)) continue;
             _items.Add(FromLocal(position));
         }
 
         RenderList();
     }
-
-    private static bool IsTestEntry(string movieId, string? title) =>
-        movieId == "99999"
-        || (!string.IsNullOrEmpty(title) &&
-            (title.Contains("test", StringComparison.OrdinalIgnoreCase)
-             || title.Contains("тест", StringComparison.OrdinalIgnoreCase)));
-
-    internal static bool IsLocalTestEntry(string movieId, string? title) => IsTestEntry(movieId, title);
 
     /// <summary>
     /// Server "continue" dates look like "12.09.2026", sometimes with time
@@ -178,9 +169,6 @@ public sealed partial class ContinueWatchingPage : Page
 
             foreach (var item in account)
             {
-                if (IsTestEntry(ExtractNumericId(item.Id) ?? item.Id, item.Title))
-                    continue;
-
                 _accountIds.Add(item.Id);
                 var numeric = ExtractNumericId(item.Id);
                 WatchPosition? match = numeric != null && positions.TryGetValue(numeric, out var pos) ? pos : null;

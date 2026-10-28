@@ -27,22 +27,29 @@ public sealed record StoredUpdate(
 /// <summary>
 /// Tracks watched series and notifies about new seasons/episodes.
 /// Baseline snapshot is taken silently on first sight — only growth notifies.
+///
+/// Состояние читается из UI-потока (HomePage, UpdatesPage, бейдж), а пишется
+/// из фоновой проверки (CheckOnStartupAsync) — все обращения идут под _lock,
+/// наружу отдаются копии, чтобы не ловить "Collection was modified".
 /// </summary>
 public static class TrackedSeriesService
 {
     private const int MaxTracked = 30;
     private const int MaxCheckedPerRun = 25;
+    private const int MaxStoredUpdates = 30;
 
     private static readonly string Dir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "HDREZKA");
 
     private static readonly string FilePath = Path.Combine(Dir, "tracked.json");
     private static readonly string UpdatesFilePath = Path.Combine(Dir, "updates.json");
-    private const int MaxStoredUpdates = 30;
 
     public static event Action? UpdatesChanged;
 
+    private static readonly object _lock = new();
+
     private static List<StoredUpdate> _updates = LoadUpdates();
+    private static Dictionary<string, TrackedTitle> _tracked = LoadTracked();
 
     private static List<StoredUpdate> LoadUpdates()
     {
@@ -58,7 +65,21 @@ public static class TrackedSeriesService
         }
     }
 
-    private static void PersistUpdates()
+    private static Dictionary<string, TrackedTitle> LoadTracked()
+    {
+        try
+        {
+            if (!File.Exists(FilePath)) return new();
+            var json = File.ReadAllText(FilePath);
+            return JsonSerializer.Deserialize<Dictionary<string, TrackedTitle>>(json) ?? new();
+        }
+        catch
+        {
+            return new();
+        }
+    }
+
+    private static void PersistUpdatesLocked()
     {
         try
         {
@@ -79,64 +100,7 @@ public static class TrackedSeriesService
         }
     }
 
-    public static IReadOnlyList<StoredUpdate> GetUpdates() =>
-        _updates.OrderByDescending(u => u.Date).ToList();
-
-    public static int UnreadCount => _updates.Count;
-
-    public static void AddUpdates(IEnumerable<SeriesUpdate> updates)
-    {
-        var added = false;
-        foreach (var u in updates)
-        {
-            // Same title+text twice: refresh date instead of duplicating.
-            _updates.RemoveAll(x => x.PagePath == u.PagePath && x.Text == u.Text);
-            _updates.Add(new StoredUpdate(u.PagePath, u.Title, u.Poster, u.Text, DateTime.Now));
-            added = true;
-        }
-
-        if (added)
-        {
-            PersistUpdates();
-            try { UpdatesChanged?.Invoke(); } catch { }
-        }
-    }
-
-    public static void RemoveUpdate(StoredUpdate update)
-    {
-        var removed = _updates.RemoveAll(x => x.PagePath == update.PagePath && x.Text == update.Text && x.Date == update.Date);
-        if (removed > 0)
-        {
-            PersistUpdates();
-            try { UpdatesChanged?.Invoke(); } catch { }
-        }
-    }
-
-    public static void ClearUpdates()
-    {
-        if (_updates.Count == 0) return;
-        _updates.Clear();
-        PersistUpdates();
-        try { UpdatesChanged?.Invoke(); } catch { }
-    }
-
-    private static Dictionary<string, TrackedTitle> _tracked = Load();
-
-    private static Dictionary<string, TrackedTitle> Load()
-    {
-        try
-        {
-            if (!File.Exists(FilePath)) return new();
-            var json = File.ReadAllText(FilePath);
-            return JsonSerializer.Deserialize<Dictionary<string, TrackedTitle>>(json) ?? new();
-        }
-        catch
-        {
-            return new();
-        }
-    }
-
-    private static void Persist()
+    private static void PersistTrackedLocked()
     {
         try
         {
@@ -158,35 +122,111 @@ public static class TrackedSeriesService
         }
     }
 
+    private static void RaiseUpdatesChanged()
+    {
+        try { UpdatesChanged?.Invoke(); } catch { }
+    }
+
+    public static IReadOnlyList<StoredUpdate> GetUpdates()
+    {
+        lock (_lock)
+        {
+            return _updates.OrderByDescending(u => u.Date).ToList();
+        }
+    }
+
+    public static int UnreadCount
+    {
+        get
+        {
+            lock (_lock) return _updates.Count;
+        }
+    }
+
+    public static void AddUpdates(IEnumerable<SeriesUpdate> updates)
+    {
+        var added = false;
+        lock (_lock)
+        {
+            foreach (var u in updates)
+            {
+                // Same title+text twice: refresh date instead of duplicating.
+                _updates.RemoveAll(x => x.PagePath == u.PagePath && x.Text == u.Text);
+                _updates.Add(new StoredUpdate(u.PagePath, u.Title, u.Poster, u.Text, DateTime.Now));
+                added = true;
+            }
+
+            if (added) PersistUpdatesLocked();
+        }
+
+        if (added) RaiseUpdatesChanged();
+    }
+
+    public static void RemoveUpdate(StoredUpdate update)
+    {
+        bool removed;
+        lock (_lock)
+        {
+            removed = _updates.RemoveAll(
+                x => x.PagePath == update.PagePath && x.Text == update.Text && x.Date == update.Date) > 0;
+            if (removed) PersistUpdatesLocked();
+        }
+
+        if (removed) RaiseUpdatesChanged();
+    }
+
+    public static void ClearUpdates()
+    {
+        bool any;
+        lock (_lock)
+        {
+            any = _updates.Count > 0;
+            if (!any) return;
+            _updates.Clear();
+            PersistUpdatesLocked();
+        }
+
+        RaiseUpdatesChanged();
+    }
+
     /// <summary>Remember a series the user watches. Series only (season+episode).</summary>
     public static void Touch(string pagePath, string? title, string? poster)
     {
         if (string.IsNullOrWhiteSpace(pagePath)) return;
         try
         {
-            if (_tracked.TryGetValue(pagePath, out var existing))
+            lock (_lock)
             {
-                _tracked[pagePath] = existing with
+                if (_tracked.TryGetValue(pagePath, out var existing))
                 {
-                    Title = title ?? existing.Title,
-                    Poster = poster ?? existing.Poster,
-                    UpdatedAt = DateTime.Now,
-                };
-            }
-            else
-            {
-                _tracked[pagePath] = new TrackedTitle(pagePath, title, poster, null, DateTime.Now);
-            }
+                    _tracked[pagePath] = existing with
+                    {
+                        Title = title ?? existing.Title,
+                        Poster = poster ?? existing.Poster,
+                        UpdatedAt = DateTime.Now,
+                    };
+                }
+                else
+                {
+                    _tracked[pagePath] = new TrackedTitle(pagePath, title, poster, null, DateTime.Now);
+                }
 
-            Persist();
+                PersistTrackedLocked();
+            }
         }
         catch
         {
         }
     }
 
-    public static bool IsTracked(string pagePath) =>
-        !string.IsNullOrWhiteSpace(pagePath) && _tracked.ContainsKey(pagePath);
+    public static bool IsTracked(string pagePath)
+    {
+        if (string.IsNullOrWhiteSpace(pagePath)) return false;
+        lock (_lock)
+        {
+            return _tracked.ContainsKey(pagePath);
+        }
+    }
 
     /// <returns>New tracked state.</returns>
     public static bool ToggleTracked(string pagePath, string? title, string? poster)
@@ -194,10 +234,13 @@ public static class TrackedSeriesService
         if (string.IsNullOrWhiteSpace(pagePath)) return false;
         try
         {
-            if (_tracked.Remove(pagePath))
+            lock (_lock)
             {
-                Persist();
-                return false;
+                if (_tracked.Remove(pagePath))
+                {
+                    PersistTrackedLocked();
+                    return false;
+                }
             }
         }
         catch
@@ -214,17 +257,21 @@ public static class TrackedSeriesService
     {
         try
         {
-            foreach (var p in PositionService.Instance.GetAll())
+            var positions = PositionService.Instance.GetAll();
+            lock (_lock)
             {
-                if (p.SeasonId == null || p.EpisodeId == null) continue;
-                var id = p.PagePath ?? p.MovieId;
-                if (!_tracked.ContainsKey(id))
+                foreach (var p in positions)
                 {
-                    _tracked[id] = new TrackedTitle(id, p.Title, p.PosterUrl, null, p.UpdatedAt);
+                    if (p.SeasonId == null || p.EpisodeId == null) continue;
+                    var id = p.PagePath ?? p.MovieId;
+                    if (!_tracked.ContainsKey(id))
+                    {
+                        _tracked[id] = new TrackedTitle(id, p.Title, p.PosterUrl, null, p.UpdatedAt);
+                    }
                 }
-            }
 
-            Persist();
+                PersistTrackedLocked();
+            }
         }
         catch
         {
@@ -268,10 +315,14 @@ public static class TrackedSeriesService
         var updates = new List<SeriesUpdate>();
         var client = RezkaService.Instance.Client;
 
-        var titles = _tracked.Values
-            .OrderByDescending(t => t.UpdatedAt)
-            .Take(MaxCheckedPerRun)
-            .ToList();
+        List<TrackedTitle> titles;
+        lock (_lock)
+        {
+            titles = _tracked.Values
+                .OrderByDescending(t => t.UpdatedAt)
+                .Take(MaxCheckedPerRun)
+                .ToList();
+        }
 
         foreach (var title in titles)
         {
@@ -284,14 +335,17 @@ public static class TrackedSeriesService
                     ? null // first sight: silent baseline
                     : DiffText(title.Snapshot, snap, details.Seasons);
 
-                _tracked[title.PagePath] = title with
+                lock (_lock)
                 {
-                    Snapshot = snap,
-                    Title = details.Name,
-                    Poster = details.Poster ?? title.Poster,
-                    UpdatedAt = DateTime.Now,
-                };
-                Persist();
+                    _tracked[title.PagePath] = title with
+                    {
+                        Snapshot = snap,
+                        Title = details.Name,
+                        Poster = details.Poster ?? title.Poster,
+                        UpdatedAt = DateTime.Now,
+                    };
+                    PersistTrackedLocked();
+                }
 
                 if (text != null)
                 {

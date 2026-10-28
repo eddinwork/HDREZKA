@@ -43,7 +43,7 @@ public sealed class DownloadService
 
     static DownloadService()
     {
-        Http.DefaultRequestHeaders.UserAgent.ParseAdd("HDREZKA/1.0.0 (Windows; WinUI)");
+        Http.DefaultRequestHeaders.UserAgent.ParseAdd(HDREZKA.Core.Api.BuildInfo.UserAgent);
     }
 
     private DownloadService()
@@ -95,7 +95,27 @@ public sealed class DownloadService
         }
 
         name = name.Trim().TrimEnd('.');
-        return name.Length == 0 ? "video" : name;
+        if (name.Length == 0) return "video";
+
+        // Зарезервированные имена устройств (CON, PRN, AUX, NUL, COM1..): файл
+        // с таким именем создать нельзя, загрузка упадёт в самом конце.
+        var stem = name.Split('.')[0].ToUpperInvariant();
+        if (stem is "CON" or "PRN" or "AUX" or "NUL"
+            || (stem.Length == 4 && (stem.StartsWith("COM") || stem.StartsWith("LPT"))
+                && char.IsDigit(stem[3])))
+        {
+            name = "_" + name;
+        }
+
+        // Длинные названия + папка сериала легко упираются в MAX_PATH.
+        const int maxLength = 120;
+        if (name.Length > maxLength)
+        {
+            var ext = Path.GetExtension(name);
+            name = name[..(maxLength - ext.Length)].TrimEnd() + ext;
+        }
+
+        return name;
     }
 
     public IReadOnlyList<DownloadJob> Jobs

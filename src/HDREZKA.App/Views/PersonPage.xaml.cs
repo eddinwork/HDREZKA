@@ -11,6 +11,7 @@ public sealed partial class PersonPage : Page
 {
     private PersonSimple? _person;
     private PersonDetailed? _details;
+    private bool _mirrorRecovered;
 
     private sealed record FilmRow(string Title, string? Details, string? Poster, MovieSimple Source);
 
@@ -83,6 +84,17 @@ public sealed partial class PersonPage : Page
         catch (RezkaException ex)
         {
             App.TryLog(new Exception($"[Person] failed id={person.Id}: {ex.Kind} {ex.Message}"));
+
+            if (!_mirrorRecovered && ex.Kind is RezkaError.Network or RezkaError.AccessDenied or RezkaError.MirrorBanned)
+            {
+                _mirrorRecovered = true;
+                if (await MirrorRecovery.TryRecoverAsync())
+                {
+                    DispatcherQueue.TryEnqueue(() => _ = LoadAsync(person));
+                    return;
+                }
+            }
+
             LoadingPanel.Visibility = Visibility.Collapsed;
             ErrorPanel.Visibility = Visibility.Visible;
             ErrorText.Text = RezkaService.Instance.ErrorText(ex);

@@ -1,4 +1,4 @@
-﻿using HDREZKA.App.Services;
+using HDREZKA.App.Services;
 using Microsoft.UI.Xaml;
 using System;
 using System.IO;
@@ -107,8 +107,9 @@ public partial class App : Application
         // Update check on every launch (notifies at most once per version).
         _ = Services.UpdateService.CheckAndNotifyAsync(MainWindow);
 
-        // First-launch mirror autopick (silent, skips logged-in sessions).
-        _ = Services.MirrorService.AutoPickOnStartupAsync();
+        // First-launch mirror autopick + health check of the saved mirror
+        // (geo-blocks change; a dead mirror must not require manual picking).
+        _ = Services.MirrorService.EnsureOnStartupAsync();
 
         // New-episode notifications for watched series (delayed, background).
         _ = Services.TrackedSeriesService.CheckOnStartupAsync();

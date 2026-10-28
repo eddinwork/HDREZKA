@@ -145,7 +145,7 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private void MirrorBox_LostFocus(object sender, RoutedEventArgs e)
+    private async void MirrorBox_LostFocus(object sender, RoutedEventArgs e)
     {
         var mirror = MirrorBox.Text.Trim();
         if (!Uri.TryCreate(mirror, UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https"))
@@ -155,11 +155,32 @@ public sealed partial class SettingsPage : Page
         }
 
         if (!mirror.EndsWith('/')) mirror += '/';
-        if (mirror == SettingsService.Instance.Mirror) return;
+        if (mirror.Equals(SettingsService.Instance.Mirror, StringComparison.OrdinalIgnoreCase)) return;
+
+        // Смена домена = потеря сессии: куки привязаны к домену.
+        // Автоподбор об этом предупреждает, ручной ввод — тоже должен.
+        if (RezkaService.Instance.IsLoggedIn)
+        {
+            var dialog = new ContentDialog
+            {
+                Title = Loc.Get("Mirror.PickTitle"),
+                Content = Loc.Get("Mirror.PickLogoutWarn", mirror),
+                PrimaryButtonText = Loc.Get("Mirror.Apply"),
+                CloseButtonText = Loc.Get("Common.Cancel"),
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = Content.XamlRoot,
+            };
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            {
+                MirrorBox.Text = SettingsService.Instance.Mirror;
+                return;
+            }
+        }
 
         SettingsService.Instance.Mirror = mirror;
         SettingsService.Instance.Save();
         RezkaService.Instance.ApplySettings();
+        MirrorStatusText.Text = "";
     }
 
     private void LanguageBox_SelectionChanged(object sender, SelectionChangedEventArgs e)

@@ -28,6 +28,8 @@ public sealed partial class DetailsPage : Page
     private int _commentsPage = 1;
     private bool _commentsLoaded;
     private string? _replyTo;
+    private bool _mirrorRecovered;
+    private int? _bookmarkedCategoryId;
 
     public DetailsPage()
     {
@@ -102,7 +104,7 @@ public sealed partial class DetailsPage : Page
     private void ApplyLocalization()
     {
         WatchText.Text = Loc.Get("Common.Watch");
-        BookmarkText.Text = Loc.Get("Common.AddToBookmarks");
+        UpdateBookmarkLabel();
         WatchedText.Text = Loc.Get("Continue.ToggleWatched");
         TrackText.Text = Loc.Get("Details.Track");
         TrailerText.Text = Loc.Get("Common.Trailer");
@@ -131,6 +133,17 @@ public sealed partial class DetailsPage : Page
         }
         catch (RezkaException ex)
         {
+            // 403/бан/сеть: одна попытка молча сменить зеркало и перезагрузить.
+            if (!_mirrorRecovered && ex.Kind is RezkaError.Network or RezkaError.AccessDenied or RezkaError.MirrorBanned)
+            {
+                _mirrorRecovered = true;
+                if (await MirrorRecovery.TryRecoverAsync(movie.Id))
+                {
+                    await LoadAsync(movie);
+                    return;
+                }
+            }
+
             LoadingPanel.Visibility = Visibility.Collapsed;
             ErrorPanel.Visibility = Visibility.Visible;
             ErrorText.Text = RezkaService.Instance.ErrorText(ex);
@@ -212,6 +225,8 @@ public sealed partial class DetailsPage : Page
 
         UpdateWatchedButton();
         UpdateTrackButton();
+        _bookmarkedCategoryId = null;
+        UpdateBookmarkLabel();
         UpdateVoicesRatingButton(details);
         RenderSchedule(details);
         RenderWatchAlso(details);
@@ -879,19 +894,26 @@ public sealed partial class DetailsPage : Page
                     Text = $"{category.Name} ({category.Count})",
                     Tag = category.Id,
                 };
-                item.Click += async (_, _) =>
+                if (category.Id == _bookmarkedCategoryId)
                 {
-                    try
-                    {
-                        await RezkaService.Instance.Client.AddToBookmarksAsync(numericId, category.Id);
-                        BookmarkText.Text = Loc.Get("Common.RemoveFromBookmarks");
-                    }
-                    catch (RezkaException ex)
-                    {
-                        await ShowErrorAsync(RezkaService.Instance.ErrorText(ex));
-                    }
-                };
+                    item.Icon = new FontIcon { Glyph = "\uE73E" };
+                }
+
+                item.Click += async (_, _) => await SetBookmarkAsync(numericId, category.Id);
                 menu.Items.Add(item);
+            }
+
+            if (_bookmarkedCategoryId is int bookmarked)
+            {
+                menu.Items.Add(new MenuFlyoutSeparator());
+                var remove = new MenuFlyoutItem
+                {
+                    Text = Loc.Get("Bookmarks.Remove"),
+                    Tag = bookmarked,
+                    Icon = new SymbolIcon(Symbol.Delete),
+                };
+                remove.Click += async (_, _) => await RemoveBookmarkAsync(numericId, bookmarked);
+                menu.Items.Add(remove);
             }
 
             menu.ShowAt(BookmarkButton, new Windows.Foundation.Point());
@@ -900,6 +922,41 @@ public sealed partial class DetailsPage : Page
         {
             await ShowErrorAsync(RezkaService.Instance.ErrorText(ex));
         }
+    }
+
+    private async Task SetBookmarkAsync(string numericId, int categoryId)
+    {
+        try
+        {
+            await RezkaService.Instance.Client.AddToBookmarksAsync(numericId, categoryId);
+            _bookmarkedCategoryId = categoryId;
+            UpdateBookmarkLabel();
+        }
+        catch (RezkaException ex)
+        {
+            await ShowErrorAsync(RezkaService.Instance.ErrorText(ex));
+        }
+    }
+
+    private async Task RemoveBookmarkAsync(string numericId, int categoryId)
+    {
+        try
+        {
+            await RezkaService.Instance.Client.RemoveFromBookmarksAsync([numericId], categoryId);
+            _bookmarkedCategoryId = null;
+            UpdateBookmarkLabel();
+        }
+        catch (RezkaException ex)
+        {
+            await ShowErrorAsync(RezkaService.Instance.ErrorText(ex));
+        }
+    }
+
+    private void UpdateBookmarkLabel()
+    {
+        BookmarkText.Text = _bookmarkedCategoryId != null
+            ? Loc.Get("Common.RemoveFromBookmarks")
+            : Loc.Get("Common.AddToBookmarks");
     }
 
     private async Task ShowLoginAsync()

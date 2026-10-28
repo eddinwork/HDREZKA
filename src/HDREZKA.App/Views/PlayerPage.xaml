@@ -141,6 +141,9 @@
                     <ToggleButton x:Name="PinButton" Click="PinButton_Click" Background="Transparent" BorderThickness="0" Padding="8">
                         <FontIcon x:Name="PinIcon" Glyph="&#xE718;" Foreground="White" FontSize="15"/>
                     </ToggleButton>
+                    <Button x:Name="MinimizeButton" Click="MinimizeButton_Click" Background="Transparent" BorderThickness="0" Padding="8">
+                        <FontIcon Glyph="&#xE921;" Foreground="White" FontSize="15"/>
+                    </Button>
                     <Button x:Name="CloseButton" Click="CloseButton_Click" Background="Transparent" BorderThickness="0" Padding="8">
                         <FontIcon Glyph="&#xE8BB;" Foreground="White" FontSize="15"/>
                     </Button>

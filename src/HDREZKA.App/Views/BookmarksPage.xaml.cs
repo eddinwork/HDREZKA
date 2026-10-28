@@ -15,6 +15,7 @@ public sealed partial class BookmarksPage : Page
     private int _page = 1;
     private bool _hasMore = true;
     private bool _loading;
+    private bool _mirrorRecovered;
 
     public BookmarksPage()
     {
@@ -81,6 +82,16 @@ public sealed partial class BookmarksPage : Page
         }
         catch (RezkaException ex)
         {
+            if (!_mirrorRecovered && ex.Kind is RezkaError.Network or RezkaError.AccessDenied or RezkaError.MirrorBanned)
+            {
+                _mirrorRecovered = true;
+                if (await MirrorRecovery.TryRecoverAsync())
+                {
+                    DispatcherQueue.TryEnqueue(() => _ = LoadCategoriesAsync());
+                    return;
+                }
+            }
+
             ShowState(false, RezkaService.Instance.ErrorText(ex));
         }
     }
@@ -198,6 +209,16 @@ public sealed partial class BookmarksPage : Page
         }
         catch (RezkaException ex)
         {
+            if (!_mirrorRecovered && ex.Kind is RezkaError.Network or RezkaError.AccessDenied or RezkaError.MirrorBanned)
+            {
+                _mirrorRecovered = true;
+                if (await MirrorRecovery.TryRecoverAsync())
+                {
+                    DispatcherQueue.TryEnqueue(() => _ = LoadItemsAsync());
+                    return;
+                }
+            }
+
             ShowState(true, RezkaService.Instance.ErrorText(ex));
         }
         finally

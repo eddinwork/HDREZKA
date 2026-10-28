@@ -61,8 +61,9 @@ public sealed partial class PlayerWindow : Window
     }
 
     /// <summary>
-    /// Chromeless player: no system title bar (close/pin are custom buttons
-    /// in the app top bar), keeps the resizable border, min/max disabled.
+    /// Chromeless player: no system title bar (close/pin/minimize are custom
+    /// buttons in the app top bar), keeps the resizable border. Minimize is
+    /// enabled on purpose — the window used to be impossible to minimize.
     /// Must be re-applied after every SetPresenter call — it creates
     /// a new presenter with default flags.
     /// </summary>
@@ -73,7 +74,7 @@ public sealed partial class PlayerWindow : Window
             if (AppWindow.Presenter is OverlappedPresenter presenter)
             {
                 presenter.SetBorderAndTitleBar(true, false);
-                presenter.IsMinimizable = false;
+                presenter.IsMinimizable = true;
                 presenter.IsMaximizable = false;
             }
         }

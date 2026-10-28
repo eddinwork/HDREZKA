@@ -2,6 +2,18 @@
 
 MIT License. Full text in English, Russian and Ukrainian below.
 
+## Attribution
+
+This Windows client is a port of the macOS client **HDrezka for macOS**
+(https://github.com/voidboost/hdrezka-swiftui), distributed under the MIT License,
+Copyright (c) 2025 voidboost. Site parsing, API interaction and the stream URL
+decryption algorithm are derivative works of that project.
+
+Этот клиент для Windows портирован с macOS-клиента **HDrezka for macOS**
+(https://github.com/voidboost/hdrezka-swiftui), распространяемого по лицензии MIT,
+Copyright (c) 2025 voidboost. Парсинг сайта, работа с API и алгоритм дешифрования
+ссылок на поток являются производными от того проекта.
+
 ---
 
 ## English
