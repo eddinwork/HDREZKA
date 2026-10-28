@@ -421,17 +421,27 @@ public sealed partial class HomePage : Page
                 return;
             }
 
+            // Сезоны зависят от озвучки: HTML отдаёт набор по умолчанию, а
+            // сохранённая позиция могла быть в другой озвучке (у неё свой
+            // набор сезонов), поэтому для сериалов запрашиваем get_episodes.
+            var numeric = ContinueWatchingPage.ExtractNumericId(details.Id);
             IReadOnlyList<MovieSeason>? seasons = details.Seasons;
-            if (voice.Url == null && seasons == null)
+            var likelySeries = details.Seasons is { Count: > 0 } || voice.Url != null;
+            if (numeric != null && likelySeries)
             {
-                var numeric = ContinueWatchingPage.ExtractNumericId(details.Id);
-                if (numeric == null)
+                try
                 {
-                    GoToDetails(item);
-                    return;
+                    seasons = await client.GetSeriesSeasonsAsync(numeric, voice, details.Favs);
                 }
-
-                seasons = await client.GetSeriesSeasonsAsync(numeric, voice, details.Favs);
+                catch (RezkaException)
+                {
+                    seasons = details.Seasons;
+                }
+            }
+            else if (numeric == null && seasons == null)
+            {
+                GoToDetails(item);
+                return;
             }
 
             var season = seasons?.FirstOrDefault(s => s.SeasonId == item.SeasonKey)

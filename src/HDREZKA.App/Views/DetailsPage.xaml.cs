@@ -30,6 +30,7 @@ public sealed partial class DetailsPage : Page
     private string? _replyTo;
     private bool _mirrorRecovered;
     private int? _bookmarkedCategoryId;
+    private int _seasonsGeneration;
 
     public DetailsPage()
     {
@@ -159,8 +160,64 @@ public sealed partial class DetailsPage : Page
             ErrorPanel.Visibility = Visibility.Collapsed;
             MainPanel.Visibility = Visibility.Visible;
             Render(details);
+
+            // HTML отдаёт сезоны только для озвучки по умолчанию: тихо сверяем
+            // с get_episodes и восстанавливаем последнюю озвучку/сезон из истории
+            // (у разных озвучек разный набор сезонов, например 1 или 2).
+            if (details.Seasons is { Count: > 0 } && _voice != null)
+            {
+                _ = RestoreOrSyncSeasonsAsync();
+            }
         });
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Открывает тайтл в той озвучке/сезоне/серии, где пользователь остановился,
+    /// и синхронизирует список сезонов через get_episodes.
+    /// </summary>
+    private async Task RestoreOrSyncSeasonsAsync()
+    {
+        if (_details == null) return;
+
+        var numericId = ExtractNumericId(_details.Id);
+        var last = PositionService.Instance.GetLatestFor(numericId ?? _details.Id, _details.Id);
+
+        var savedVoice = last == null
+            ? null
+            : _details.VoiceActings?.FirstOrDefault(v => v.TranslatorId == last.TranslatorId);
+
+        if (savedVoice != null)
+        {
+            _voice = savedVoice;
+            MarkSelectedVoice(savedVoice);
+            await RefreshSeasonsAsync(savedVoice, resetSelection: true);
+        }
+        else
+        {
+            await RefreshSeasonsAsync(_voice, resetSelection: false);
+        }
+
+        if (last?.SeasonId == null || _seasons == null || _seasons.Count == 0) return;
+
+        var season = _seasons.FirstOrDefault(s => s.SeasonId == last.SeasonId);
+        if (season == null) return;
+
+        _season = season;
+        _episode = season.Episodes.FirstOrDefault(ep => ep.EpisodeId == last.EpisodeId)
+            ?? season.Episodes.FirstOrDefault();
+
+        RenderSeasons();
+        UpdateWatchedButton();
+        UpdateSeasonDownloadVisibility();
+    }
+
+    private void MarkSelectedVoice(MovieVoiceActing voice)
+    {
+        foreach (var child in VoicesList.Children.OfType<ToggleButton>())
+        {
+            child.IsChecked = child.Tag is MovieVoiceActing candidate && ReferenceEquals(candidate, voice);
+        }
     }
 
     private void Render(MovieDetailed details)
@@ -685,34 +742,117 @@ public sealed partial class DetailsPage : Page
         }
 
         _voice = voice;
-        _season = null;
-        _episode = null;
-
-        // reload seasons for this voice if needed
+        SeasonBox.IsEnabled = false;
         try
         {
-            var numericId = ExtractNumericId(_details.Id);
-            if (numericId != null && voice.Url == null && _details.Seasons == null)
-            {
-                _seasons = await RezkaService.Instance.Client.GetSeriesSeasonsAsync(numericId, voice, _details.Favs);
-            }
-            else
-            {
-                _seasons = _details.Seasons;
-            }
-
-            _season = _seasons?.FirstOrDefault();
-            _episode = _season?.Episodes.FirstOrDefault();
-            RenderSeasons();
+            // Сезоны у каждой озвучки СВОИ: сайт отдаёт их через get_episodes,
+            // а HTML содержит только набор озвучки по умолчанию. Поэтому при
+            // смене озвучки всегда перезапрашиваем (так делает mac-клиент),
+            // иначе у Coldfilm с двумя сезонами пользователь видел один.
+            await RefreshSeasonsAsync(voice, resetSelection: true);
         }
-        catch (RezkaException)
+        finally
         {
-            _seasons = _details.Seasons;
-            RenderSeasons();
+            SeasonBox.IsEnabled = true;
         }
 
         UpdateWatchedButton();
         UpdateSeasonDownloadVisibility();
+    }
+
+    /// <summary>
+    /// Перезапрашивает список сезонов для конкретной озвучки.
+    /// HTML-версия остаётся запасным вариантом (фильм, ошибка сети, пустой ответ).
+    /// </summary>
+    private async Task RefreshSeasonsAsync(MovieVoiceActing? voice, bool resetSelection)
+    {
+        if (_details == null || voice == null) return;
+
+        var likelySeries = _details.Seasons is { Count: > 0 } || _details.Schedule != null || voice.Url != null;
+        var numericId = ExtractNumericId(_details.Id);
+
+        if (!likelySeries || numericId == null)
+        {
+            if (!resetSelection) return;
+            _seasons = _details.Seasons;
+            ApplySeasonSelection(reset: true);
+            RenderSeasons();
+            return;
+        }
+
+        var generation = ++_seasonsGeneration;
+
+        IReadOnlyList<MovieSeason>? seasons = null;
+        try
+        {
+            seasons = await RezkaService.Instance.Client.GetSeriesSeasonsAsync(numericId, voice, _details.Favs);
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(new Exception($"[Details] seasons translator={voice.TranslatorId} failed: {ex.Message}"));
+        }
+
+        // Пользователь успел переключить другую озвучку — этот ответ устарел.
+        if (generation != _seasonsGeneration) return;
+
+        if (seasons is { Count: > 0 })
+        {
+            // Стартовая синхронизация: если HTML уже дал тот же набор,
+            // не перерисовываем список (иначе слетает выбранная серия).
+            if (!resetSelection && SameSeasonSet(seasons, _seasons)) return;
+            _seasons = seasons;
+        }
+        else if (resetSelection)
+        {
+            _seasons = _details.Seasons;
+        }
+        else
+        {
+            return;
+        }
+
+        ApplySeasonSelection(resetSelection);
+        RenderSeasons();
+        UpdateWatchedButton();
+        UpdateSeasonDownloadVisibility();
+    }
+
+    private static bool SameSeasonSet(IReadOnlyList<MovieSeason>? a, IReadOnlyList<MovieSeason>? b)
+    {
+        if (a == null || b == null) return false;
+        if (a.Count != b.Count) return false;
+        for (var i = 0; i < a.Count; i++)
+        {
+            if (a[i].SeasonId != b[i].SeasonId) return false;
+            if (a[i].Episodes.Count != b[i].Episodes.Count) return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>Сохраняет текущий сезон/серию, если они есть в новом наборе.</summary>
+    private void ApplySeasonSelection(bool reset)
+    {
+        if (_seasons is not { Count: > 0 })
+        {
+            _season = null;
+            _episode = null;
+            return;
+        }
+
+        var previousSeasonId = reset ? null : _season?.SeasonId;
+        var previousEpisodeId = reset ? null : _episode?.EpisodeId;
+
+        var season = (previousSeasonId == null ? null : _seasons.FirstOrDefault(s => s.SeasonId == previousSeasonId))
+            ?? _seasons.FirstOrDefault(s => s.IsSelected)
+            ?? _seasons[0];
+
+        var episode = (previousEpisodeId == null ? null : season.Episodes.FirstOrDefault(ep => ep.EpisodeId == previousEpisodeId))
+            ?? season.Episodes.FirstOrDefault(ep => ep.IsSelected)
+            ?? season.Episodes.FirstOrDefault();
+
+        _season = season;
+        _episode = episode;
     }
 
     private void RenderSeasons()

@@ -63,6 +63,22 @@ public sealed class PositionService
         }
     }
 
+    /// <summary>
+    /// Последняя позиция по тайтлу без фильтров «недосмотрено» — нужна, чтобы
+    /// открыть фильм в той же озвучке/сезоне, где пользователь остановился
+    /// (у разных озвучек разный набор сезонов).
+    /// </summary>
+    public WatchPosition? GetLatestFor(string movieId, string? pagePath = null)
+    {
+        lock (_lock)
+        {
+            return _positions.Values
+                .Where(p => p.MovieId == movieId || (pagePath != null && p.PagePath == pagePath))
+                .OrderByDescending(p => p.UpdatedAt)
+                .FirstOrDefault();
+        }
+    }
+
     public void Save(WatchPosition position)
     {
         lock (_lock)
