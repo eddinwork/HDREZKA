@@ -82,6 +82,141 @@ public static class Parsers
         };
     }
 
+    /// <summary>
+    /// Разбирает JSON, который сайт может отдавать в обёртке (JSONP,
+    /// callback(...);, префикс скрипта). Пробуем как есть, затем перебираем
+    /// сбалансированные объекты {...} и берём тот, где есть нужное свойство.
+    /// </summary>
+    /// <param name="requiredProperties">
+    /// Свойства, по которым узнаётся «наш» объект среди JS-кода вокруг.
+    /// </param>
+    public static JsonDocument ParseJsonLoose(string body, string what, params string[] requiredProperties)
+    {
+        if (string.IsNullOrWhiteSpace(body)) throw RezkaException.Parse(what);
+
+        try
+        {
+            return JsonDocument.Parse(body);
+        }
+        catch (JsonException)
+        {
+            // ниже пробуем вырезать объект
+        }
+
+        JsonDocument? fallback = null;
+        try
+        {
+            foreach (var candidate in JsonCandidates(body))
+            {
+                JsonDocument doc;
+                try
+                {
+                    doc = JsonDocument.Parse(candidate);
+                }
+                catch (JsonException)
+                {
+                    continue;
+                }
+
+                if (requiredProperties.Length == 0)
+                {
+                    fallback?.Dispose();
+                    return doc;
+                }
+
+                var matches = doc.RootElement.ValueKind == JsonValueKind.Object
+                    && requiredProperties.Any(p => doc.RootElement.TryGetProperty(p, out _));
+                if (matches)
+                {
+                    fallback?.Dispose();
+                    return doc;
+                }
+
+                if (fallback == null) fallback = doc;
+                else doc.Dispose();
+            }
+
+            if (fallback != null) return fallback;
+
+            throw new RezkaException(RezkaError.Parse,
+                $"{what}: JSON not found (body starts with '{Head(body)}')");
+        }
+        catch
+        {
+            fallback?.Dispose();
+            throw;
+        }
+    }
+
+    private static string Head(string body)
+    {
+        var text = body.Length > 120 ? body[..120] : body;
+        return text.Replace("\r", " ").Replace("\n", " ");
+    }
+
+    private static IEnumerable<string> JsonCandidates(string body)
+    {
+        var index = 0;
+        for (var yielded = 0; yielded < 20; yielded++)
+        {
+            var start = body.IndexOf('{', index);
+            if (start < 0) yield break;
+
+            var balanced = BalancedObject(body, start);
+            if (balanced != null) yield return balanced;
+            index = start + 1;
+        }
+    }
+
+    /// <summary>
+    /// Вырезает объект, начинающийся на позиции start, с учётом строк и
+    /// экранирования. Возвращает null, если скобки не сбалансированы.
+    /// </summary>
+    internal static string? BalancedObject(string body, int start)
+    {
+        if (start < 0 || start >= body.Length || body[start] != '{') return null;
+
+        var depth = 0;
+        var inString = false;
+        var escape = false;
+
+        for (var i = start; i < body.Length; i++)
+        {
+            var c = body[i];
+            if (inString)
+            {
+                if (escape) escape = false;
+                else if (c == '\\') escape = true;
+                else if (c == '"') inString = false;
+                continue;
+            }
+
+            switch (c)
+            {
+                case '"':
+                    inString = true;
+                    break;
+                case '{':
+                    depth++;
+                    break;
+                case '}':
+                    depth--;
+                    if (depth == 0) return body[start..(i + 1)];
+                    break;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Первый сбалансированный JSON-объект в строке.</summary>
+    internal static string? ExtractJsonObject(string? body)
+    {
+        if (string.IsNullOrEmpty(body)) return null;
+        var start = body.IndexOf('{');
+        return start < 0 ? null : BalancedObject(body, start);
+    }
+
     internal static void CheckDocument(IDocument doc)
     {
         var body = doc.Body ?? throw RezkaException.Parse("body");
@@ -789,7 +924,7 @@ public static class Parsers
             // fall through to JSON
         }
 
-        using var json = JsonDocument.Parse(body);
+        using var json = ParseJsonLoose(body, "seasons json", "seasons", "episodes");
         var root = json.RootElement;
 
         var seasonsHtml = root.TryGetProperty("seasons", out var sEl) && sEl.ValueKind == JsonValueKind.String
@@ -837,22 +972,14 @@ public static class Parsers
 
     public static MovieVideo ParseVideoResponse(string body)
     {
-        JsonElement root;
-        try
-        {
-            using var doc = JsonDocument.Parse(body);
-            root = doc.RootElement.Clone();
-        }
-        catch (JsonException)
-        {
-            // fallback: script response like ... {"id": ...); });
-            var start = body.IndexOf("{\"id\":", StringComparison.Ordinal);
-            var end = body.LastIndexOf("); });", StringComparison.Ordinal);
-            if (start < 0 || end <= start) throw RezkaException.Parse("video json");
-
-            using var doc = JsonDocument.Parse(body[start..end]);
-            root = doc.RootElement.Clone();
-        }
+        // Ответ сайта может быть не чистым JSON, а JSONP/скриптом:
+        //   jQuery123({"id":...});
+        //   (function(){ return {...}; })();
+        // Раньше здесь вырезался кусок по маркерам "); });" и на новых
+        // ответах оставался хвостовой ")" -> JsonReaderException и
+        // "ошибка сети" в плеере. Теперь вырезаем сбалансированный объект.
+        using var doc = ParseJsonLoose(body, "video json", "url", "streams", "message");
+        var root = doc.RootElement;
 
         string? encrypted = null;
         if (root.TryGetProperty("url", out var urlEl) && urlEl.ValueKind == JsonValueKind.String)
@@ -870,6 +997,15 @@ public static class Parsers
                 (msgEl.GetString() ?? "").Contains("необходимо авторизоваться", StringComparison.OrdinalIgnoreCase))
             {
                 throw RezkaException.LoginRequired();
+            }
+
+            // Сайт явно ответил "url": false — поток не выдан (устаревший
+            // favs-токен, премиум, удалённая серия). Это отдельный случай,
+            // его умеет лечить перечитывание страницы.
+            if (root.TryGetProperty("url", out var urlFlag) &&
+                urlFlag.ValueKind is JsonValueKind.False or JsonValueKind.Null)
+            {
+                throw RezkaException.StreamUnavailable();
             }
 
             throw RezkaException.Parse("video url");
@@ -934,7 +1070,7 @@ public static class Parsers
 
     public static void ParseLoginResponse(string body)
     {
-        using var json = JsonDocument.Parse(body);
+        using var json = ParseJsonLoose(body, "login json", "success");
         var root = json.RootElement;
 
         if (!root.TryGetProperty("success", out var successEl) || successEl.ValueKind != JsonValueKind.True)
@@ -1103,7 +1239,7 @@ public static class Parsers
 
     public static IReadOnlyList<CommentItem> ParseCommentsResponse(string body)
     {
-        using var json = JsonDocument.Parse(body);
+        using var json = ParseJsonLoose(body, "comments json", "comments");
         var root = json.RootElement;
 
         if (!root.TryGetProperty("comments", out var commentsEl) || commentsEl.ValueKind != JsonValueKind.String)

@@ -556,7 +556,11 @@ public sealed class RezkaClient : IDisposable
 
     public async Task<IReadOnlyList<MovieSeason>> GetSeriesSeasonsAsync(string movieId, MovieVoiceActing voice, string favs, CancellationToken ct = default)
     {
-        if (voice.Url == null)
+        // Основной путь — POST get_episodes по id/translator_id. Страница
+        // озвучки (voice.Url) — это HTML-навигация, а не endpoint API:
+        // GET по ней и парсинг как JSON ломает загрузку серий и, что важнее,
+        // тратит одноразовый favs-токен, после чего get_stream отдаёт url:false.
+        if (!string.IsNullOrEmpty(movieId) && !string.IsNullOrEmpty(voice.TranslatorId))
         {
             var body = await PostFormAsync(
                 $"ajax/get_cdn_series/?t={Ts()}",
@@ -571,6 +575,8 @@ public sealed class RezkaClient : IDisposable
             return Parsers.ParseSeasonsResponse(body);
         }
 
+        if (voice.Url == null) throw RezkaException.Parse("seasons");
+
         var html = await GetStringAsync(voice.Url, ct).ConfigureAwait(false);
         var doc = Parsers.ParseHtml(html);
         return Parsers.ParseSeasonsFromDocument(doc);
@@ -578,9 +584,15 @@ public sealed class RezkaClient : IDisposable
 
     public async Task<MovieVideo> GetMovieVideoAsync(MovieVoiceActing voice, MovieSeason? season, MovieEpisode? episode, string favs, CancellationToken ct = default)
     {
-        var url = episode?.Url ?? voice.Url;
+        // Ссылки episode.Url / voice.Url — это страницы сайта, а не поток.
+        // GET по ним возвращает HTML (и сжигает favs), поэтому всегда идём
+        // в ajax/get_cdn_series. GET остаётся запасным путём, если id нет.
+        var canPost = !string.IsNullOrEmpty(voice.VoiceId) && !string.IsNullOrEmpty(voice.TranslatorId)
+            && (season == null || !string.IsNullOrEmpty(season.SeasonId))
+            && (episode == null || !string.IsNullOrEmpty(episode.EpisodeId));
+
         string body;
-        if (url == null)
+        if (canPost)
         {
             var form = new Dictionary<string, string?>
             {
@@ -608,6 +620,8 @@ public sealed class RezkaClient : IDisposable
         }
         else
         {
+            var url = episode?.Url ?? voice.Url;
+            if (url == null) throw RezkaException.Parse("stream url");
             body = await GetStringAsync(url, ct).ConfigureAwait(false);
         }
 
@@ -755,7 +769,7 @@ public sealed class RezkaClient : IDisposable
             },
             ct).ConfigureAwait(false);
 
-        using var json = JsonDocument.Parse(body);
+        using var json = Parsers.ParseJsonLoose(body, "comment json", "success", "comment");
         var root = json.RootElement;
         if (root.TryGetProperty("success", out var s) && s.ValueKind == JsonValueKind.False)
         {
@@ -768,7 +782,7 @@ public sealed class RezkaClient : IDisposable
     public async Task<bool> ToggleCommentLikeAsync(string commentId, CancellationToken ct = default)
     {
         var body = await PostFormAsync("engine/ajax/comments_like.php", new Dictionary<string, string?> { ["id"] = commentId }, ct).ConfigureAwait(false);
-        using var json = JsonDocument.Parse(body);
+        using var json = Parsers.ParseJsonLoose(body, "like json", "success");
         return json.RootElement.TryGetProperty("success", out var s) && s.ValueKind == JsonValueKind.True;
     }
 

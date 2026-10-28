@@ -1,12 +1,12 @@
 {
-  "updated": "2026-09-29",
+  "updated": "2026-10-28",
   "mirrors": [
-    { "url": "https://hdrzk.org/", "region": "ALL", "note": "default" },
+    { "url": "https://hdrzk.org/", "region": "ALL", "note": "default; may 403 content pages on some ISPs" },
+    { "url": "https://hdrezka.ag/", "region": "ALL", "note": "main alt; content pages usually work" },
     { "url": "https://rezka.ag/", "region": "ALL", "note": "main" },
-    { "url": "https://rezka.fi/", "region": "ALL", "note": "main alt domain" },
-    { "url": "https://hdrezka.ag/", "region": "ALL", "note": "main alt" },
     { "url": "https://hdrezka.me/", "region": "ALL", "note": "alt" },
-    { "url": "https://rezkify.com/", "region": "ALL", "note": "alt" },
+    { "url": "https://rezka.fi/", "region": "ALL", "note": "main alt; often shows a login interstitial" },
+    { "url": "https://rezkify.com/", "region": "ALL", "note": "alt; some titles 404" },
     { "url": "https://rezka-kz.tv/", "region": "KZ", "note": "kazakhstan" },
     { "url": "https://rezka-ua.net/", "region": "UA", "note": "ukraine" }
   ]

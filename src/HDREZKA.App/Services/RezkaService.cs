@@ -165,6 +165,7 @@ public sealed class RezkaService
         RezkaError.AccessDenied => Loc.Get("Error.AccessDenied"),
         RezkaError.NotFound => Loc.Get("Error.NotFound"),
         RezkaError.InsecureMirror => Loc.Get("Error.InsecureMirror"),
+        RezkaError.StreamUnavailable => Loc.Get("Error.StreamUnavailable"),
         RezkaError.Parse => Loc.Get("Error.Parse"),
         _ => Loc.Get("Error.Network"),
     };

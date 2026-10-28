@@ -10,6 +10,15 @@ namespace HDREZKA.App.Services;
 
 public sealed record MirrorProbeResult(string Url, bool Ok, long LatencyMs);
 
+/// <summary>Результат проверки контентной страницы зеркала.</summary>
+public enum MirrorContentStatus
+{
+    Ok,
+    NotFound,
+    Blocked,
+    Error,
+}
+
 /// <summary>
 /// Automatic mirror selection: candidates come from mirrors.json in the
 /// repo (updatable without a release), with a hardcoded fallback.
@@ -17,6 +26,8 @@ public sealed record MirrorProbeResult(string Url, bool Ok, long LatencyMs);
 /// Правила, которые важны для гео-блокировок (частые 403 у пользователей из UA):
 ///  * зеркало считается рабочим только если отдаёт НАСТОЯЩУЮ страницу сайта
 ///    (маркеры каталога), а не заглушку/капчу с кодом 200;
+///  * главной недостаточно: у части провайдеров она открывается, а страницы
+///    тайтлов отдают 403 — поэтому проверяется ещё и канарейка;
 ///  * зеркала региона пользователя проверяются первыми;
 ///  * если сохранённое зеркало перестало работать, приложение само
 ///    переключается на рабочее (кроме залогиненных — их смена разлогинит).
@@ -26,6 +37,12 @@ public static class MirrorService
 {
     public const string RemoteMirrorsUrl = "https://raw.githubusercontent.com/eddinwork/HDREZKA/main/mirrors.json";
     public const string RedirectMirror = "https://rzk.link/";
+
+    /// <summary>
+    /// Стабильная страница-канарейка для проверки контента. Если она когда-то
+    /// исчезнет (404), проверка всё равно считается успешной — сайт жив.
+    /// </summary>
+    private const string CanaryPath = "series/drama/1730-pobeg-2005-latest.html";
 
     private static readonly MirrorEntry[] FallbackMirrors =
     [
@@ -253,7 +270,25 @@ public static class MirrorService
     {
         var candidates = await GetCandidatesAsync(ct).ConfigureAwait(false);
         var results = await ProbeAllAsync(candidates, ct).ConfigureAwait(false);
-        return results.FirstOrDefault(r => r.Ok)?.Url;
+        var healthy = results.Where(r => r.Ok).ToList();
+        if (healthy.Count == 0) return null;
+
+        // Главная может открываться, а страницы контента — отдавать 403
+        // (hdrzk.org так ведёт себя у части провайдеров). Проверяем канарейку
+        // и берём первое зеркало, которое реально отдаёт страницу тайтла.
+        foreach (var candidate in healthy.Take(4))
+        {
+            var status = await ProbeContentAsync(candidate.Url, CanaryPath, ct).ConfigureAwait(false);
+            if (status is MirrorContentStatus.Ok or MirrorContentStatus.NotFound)
+            {
+                LogMirror($"pick {candidate.Url} canary={status}");
+                return candidate.Url;
+            }
+
+            LogMirror($"skip {candidate.Url} canary={status}");
+        }
+
+        return healthy[0].Url;
     }
 
     private static void ApplyMirror(string url)
@@ -289,12 +324,18 @@ public static class MirrorService
             if (string.IsNullOrWhiteSpace(current)) return null;
 
             var rootOk = (await ProbeAsync(current, ct).ConfigureAwait(false)).Ok;
-            if (rootOk && (contentPath == null || await ProbeContentAsync(current, contentPath, ct).ConfigureAwait(false)))
+            var contentStatus = contentPath == null
+                ? MirrorContentStatus.Ok
+                : await ProbeContentAsync(current, contentPath, ct).ConfigureAwait(false);
+            if (rootOk && contentStatus == MirrorContentStatus.Ok)
             {
                 return null;
             }
 
-            LogMirror($"current {current} failed probe (root={rootOk} content={contentPath ?? "-"})");
+            // Тайтла нет на сайте — смена зеркала не поможет.
+            if (contentStatus == MirrorContentStatus.NotFound) return null;
+
+            LogMirror($"current {current} failed probe (root={rootOk} content={contentStatus} path={contentPath ?? "-"})");
 
             // Кандидаты проверяем в приоритетном порядке (регион → ALL → …)
             // и берём первый, который реально отдаёт нужную страницу.
@@ -304,7 +345,8 @@ public static class MirrorService
             string? best = null;
             foreach (var result in results.Where(r => r.Ok).Take(4))
             {
-                if (contentPath != null && !await ProbeContentAsync(result.Url, contentPath, ct).ConfigureAwait(false))
+                if (contentPath != null &&
+                    await ProbeContentAsync(result.Url, contentPath, ct).ConfigureAwait(false) != MirrorContentStatus.Ok)
                 {
                     continue;
                 }
@@ -338,9 +380,10 @@ public static class MirrorService
 
     /// <summary>
     /// Проверяет конкретную страницу на конкретном зеркале. Нужна, потому что
-    /// 403 бывает избирательным: главная открывается, а страница фильма — нет.
+    /// 403 бывает избирательным: главная и каталог открываются, а страница
+    /// фильма — нет (так ведёт себя hdrzk.org у части провайдеров).
     /// </summary>
-    private static async Task<bool> ProbeContentAsync(string mirror, string path, CancellationToken ct)
+    private static async Task<MirrorContentStatus> ProbeContentAsync(string mirror, string path, CancellationToken ct)
     {
         try
         {
@@ -351,13 +394,20 @@ public static class MirrorService
             req.Headers.Add("X-Hdrezka-Android-App-Version", "2.2.2");
 
             using var resp = await ProbeHttp.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-            if (!resp.IsSuccessStatusCode) return false;
+            if (resp.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)
+            {
+                return MirrorContentStatus.NotFound;
+            }
+
+            if (!resp.IsSuccessStatusCode) return MirrorContentStatus.Blocked;
+
             var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            return Parsers.LooksLikeSite(body) && !body.Contains("id=\"check-form\"", StringComparison.Ordinal);
+            if (body.Contains("id=\"check-form\"", StringComparison.Ordinal)) return MirrorContentStatus.Blocked;
+            return Parsers.LooksLikeSite(body) ? MirrorContentStatus.Ok : MirrorContentStatus.Blocked;
         }
         catch
         {
-            return false;
+            return MirrorContentStatus.Error;
         }
     }
 
@@ -415,9 +465,9 @@ public static class MirrorService
     /// </summary>
     public static async Task<string?> PickAndApplyAsync(XamlRoot? xamlRoot, DispatcherQueue? dispatcher, CancellationToken ct = default)
     {
-        var candidates = await GetCandidatesAsync(ct).ConfigureAwait(false);
-        var results = await ProbeAllAsync(candidates, ct).ConfigureAwait(false);
-        var best = results.FirstOrDefault(r => r.Ok)?.Url;
+        // Подбор с проверкой контентной страницы: «главная открылась» ≠
+        // «зеркало работает» (см. CanaryPath).
+        var best = await PickBestAsync(ct).ConfigureAwait(false);
         if (best == null) return null;
 
         var current = SettingsService.Instance.Mirror;

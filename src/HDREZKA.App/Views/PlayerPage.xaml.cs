@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Net;
+using System.Net.Http.Headers;
 using HDREZKA.App.Services;
 using HDREZKA.Core.Api;
 using Microsoft.UI.Dispatching;
@@ -18,6 +20,20 @@ namespace HDREZKA.App.Views;
 public sealed partial class PlayerPage : Page
 {
     private static readonly double[] Speeds = { 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0 };
+
+    /// <summary>Быстрая проверка CDN-ссылки до открытия в MediaPlayer.</summary>
+    private static readonly HttpClient ProbeHttp = new(new HttpClientHandler
+    {
+        AutomaticDecompression = DecompressionMethods.All,
+    })
+    {
+        Timeout = TimeSpan.FromSeconds(5),
+    };
+
+    static PlayerPage()
+    {
+        ProbeHttp.DefaultRequestHeaders.UserAgent.ParseAdd(BuildInfo.UserAgent);
+    }
 
     private MediaPlayer? _player;
     private MediaPlaybackItem? _playbackItem;
@@ -40,6 +56,12 @@ public sealed partial class PlayerPage : Page
     private readonly List<(string Quality, string Url)> _candidates = new();
     private int _candidateIndex;
     private bool _mirrorRecovered;
+
+    /// <summary>favs-токен уже перезапрашивали (не зацикливаемся).</summary>
+    private bool _favsRefreshed;
+
+    /// <summary>Хотя бы одна CDN-ссылка не ответила по HTTP — для текста ошибки.</summary>
+    private bool _cdnUnreachable;
 
     // Keeps the PC awake while video is playing (display + sleep).
     private Windows.System.Display.DisplayRequest? _displayRequest;
@@ -419,8 +441,7 @@ public sealed partial class PlayerPage : Page
                 return;
             }
 
-            _video = await RezkaService.Instance.Client.GetMovieVideoAsync(
-                _launch.Voice, _launch.Season, _launch.Episode, _launch.Details.Favs);
+            _video = await FetchVideoAsync();
 
             Log.Info($"[Player] Got video: tracks={_video.Videos.Count} subs={_video.Subtitles.Count}");
 
@@ -543,6 +564,57 @@ public sealed partial class PlayerPage : Page
         }
     }
 
+    /// <summary>
+    /// Запрос потока с однократным восстановлением favs-токена. Сайт отдаёт
+    /// "url":false, если токен со страницы устарел (долго открытая страница,
+    /// переходы по озвучкам) — тогда перечитываем страницу и пробуем снова.
+    /// </summary>
+    private async Task<MovieVideo> FetchVideoAsync()
+    {
+        if (_launch == null) throw RezkaException.Parse("launch");
+
+        var client = RezkaService.Instance.Client;
+        try
+        {
+            return await client.GetMovieVideoAsync(
+                _launch.Voice, _launch.Season, _launch.Episode, _launch.Details.Favs);
+        }
+        catch (RezkaException ex) when (!_favsRefreshed
+            && ex.Kind is RezkaError.StreamUnavailable or RezkaError.Parse or RezkaError.Site)
+        {
+            _favsRefreshed = true;
+            Log.Info($"[Player] Stream request failed ({ex.Kind}), refreshing page token");
+            var fresh = await client.GetDetailsAsync(_launch.Details.Id);
+            _launch = _launch with { Details = fresh };
+            return await client.GetMovieVideoAsync(
+                _launch.Voice, _launch.Season, _launch.Episode, fresh.Favs);
+        }
+    }
+
+    /// <summary>
+    /// Проверяет CDN-ссылку обычным HTTP-запросом (Range 0-0) до передачи
+    /// в MediaPlayer: «мёртвый» узел иначе висит до таймаута.
+    /// </summary>
+    private static async Task<(bool Ok, string Info)> ProbeCandidateAsync(string url)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Range = new RangeHeaderValue(0, 0);
+            using var response = await ProbeHttp.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+            var ok = response.StatusCode is HttpStatusCode.OK or HttpStatusCode.PartialContent;
+            var type = response.Content.Headers.ContentType?.MediaType ?? "-";
+            return (ok, $"HTTP {(int)response.StatusCode} {type}");
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.GetType().Name);
+        }
+    }
+
+    private static string HostOf(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : "?";
+
     /// <summary>Открывает текущую пару «качество + URL»; сбой сразу уводит к следующей.</summary>
     private async Task OpenCurrentCandidateAsync()
     {
@@ -551,6 +623,16 @@ public sealed partial class PlayerPage : Page
         var (quality, url) = _candidates[_candidateIndex];
         try
         {
+            var (reachable, probeInfo) = await ProbeCandidateAsync(url);
+            Log.Info($"[Player] probe {probeInfo} host={HostOf(url)} q={quality}");
+            if (!reachable)
+            {
+                _cdnUnreachable = true;
+                if (TryNextCandidate()) return;
+                ShowStatus(Loc.Get("Player.CdnBlocked"), showMirrorButton: true);
+                return;
+            }
+
             MediaSource source;
             if (url.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase))
             {
@@ -1020,9 +1102,9 @@ public sealed partial class PlayerPage : Page
     {
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(20));
+            await Task.Delay(TimeSpan.FromSeconds(12));
             if (gen != _loadGen || _mediaOpened || _player == null) return;
-            Log.Info("[Player] Open timeout: no MediaOpened in 20s");
+            Log.Info("[Player] Open timeout: no MediaOpened in 12s");
 
             // Ссылка не открылась: возможно, конкретный CDN-узел недоступен
             // в регионе пользователя — пробуем следующую.
@@ -1030,7 +1112,8 @@ public sealed partial class PlayerPage : Page
 
             // Локальный файл: зеркало тут ни при чём.
             var local = !string.IsNullOrEmpty(_launch?.LocalFile);
-            ShowStatus(local ? Loc.Get("Player.StreamFailed") : Loc.Get("Error.Network"),
+            ShowStatus(local ? Loc.Get("Player.StreamFailed")
+                    : _cdnUnreachable ? Loc.Get("Player.CdnBlocked") : Loc.Get("Error.Network"),
                 showMirrorButton: !local);
         }
         catch (Exception ex)
@@ -1261,7 +1344,8 @@ public sealed partial class PlayerPage : Page
             if (TryNextCandidate()) return;
             _pendingSeekMs = 0;
             var local = !string.IsNullOrEmpty(_launch?.LocalFile);
-            ShowStatus(Loc.Get("Player.StreamFailed"), showMirrorButton: !local);
+            ShowStatus(local ? Loc.Get("Player.StreamFailed") : Loc.Get("Player.CdnBlocked"),
+                showMirrorButton: !local);
         });
     }
 

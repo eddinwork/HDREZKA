@@ -143,6 +143,70 @@ public class RezkaClientTests
         await client.SignInAsync("user", "pass");
     }
 
+    private const string VideoJson = """
+        {"success":true,"message":"","premium_content":0,
+         "url":"[360p]https://cdn.example/360.mp4 or https://cdn2.example/360.mp4,[720p]https://cdn.example/720.mp4",
+         "quality":"720p","subtitle":false,"subtitle_lns":false,"subtitle_def":false,"thumbnails":false}
+        """;
+
+    [Fact]
+    public async Task GetMovieVideo_PostsToAjaxApi_EvenWhenEpisodeUrlIsSet()
+    {
+        // episode.Url/voice.Url — это HTML-страницы сайта, а не endpoint потока.
+        // Раньше клиент шёл по ним GET-ом, получал HTML и падал с «ошибкой сети».
+        HttpMethod? method = null;
+        string? path = null;
+
+        using var client = CreateClient((request, _) =>
+        {
+            method = request.Method;
+            path = request.RequestUri?.AbsolutePath;
+            return Json(VideoJson);
+        });
+
+        var episode = new MovieEpisode("6", "6", true, "series/drama/1730/13-fox/5-season/6-episode.html");
+        var season = new MovieSeason("5", "5", [episode], true, null);
+        var voice = new MovieVoiceActing(
+            "Дубляж", "1730", "13", "", "", "", false, true, "series/drama/1730/13-fox.html");
+
+        var video = await client.GetMovieVideoAsync(voice, season, episode, "favs");
+
+        Assert.Equal(HttpMethod.Post, method);
+        Assert.Equal("/ajax/get_cdn_series/", path);
+        Assert.Equal(2, video.Videos.Count);
+        Assert.Equal(2, video.Videos[0].Urls.Count);
+    }
+
+    [Fact]
+    public async Task GetSeriesSeasons_PostsGetEpisodes_EvenWhenVoiceHasPageUrl()
+    {
+        HttpMethod? method = null;
+
+        using var client = CreateClient((request, _) =>
+        {
+            method = request.Method;
+            const string seasonsHtml =
+                "<ul id='simple-seasons-tabs'><li class='b-simple_season__item active' data-tab_id='1'>1 сезон</li></ul>";
+            const string episodesHtml =
+                "<div id='simple-episodes-list-1'><li class='b-simple_episode__item' data-season_id='1' data-episode_id='1'>1</li></div>";
+            return Json(System.Text.Json.JsonSerializer.Serialize(new
+            {
+                success = true,
+                seasons = seasonsHtml,
+                episodes = episodesHtml,
+            }));
+        });
+
+        var voice = new MovieVoiceActing(
+            "Дубляж", "1730", "13", "", "", "", false, true, "series/drama/1730/13-fox.html");
+
+        var seasons = await client.GetSeriesSeasonsAsync("1730", voice, "favs");
+
+        Assert.Equal(HttpMethod.Post, method);
+        Assert.Single(seasons);
+        Assert.Single(seasons[0].Episodes);
+    }
+
     private static RezkaClient CreateClient(Func<HttpRequestMessage, int, HttpResponseMessage> responder) =>
         new(new RezkaClientOptions
         {

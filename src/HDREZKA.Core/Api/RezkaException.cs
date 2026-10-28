@@ -8,6 +8,7 @@ public enum RezkaError
     AccessDenied,
     NotFound,
     InsecureMirror,
+    StreamUnavailable,
     Site,
     Parse
 }
@@ -28,6 +29,10 @@ public sealed class RezkaException : Exception
     public static RezkaException MirrorBanned() => new(RezkaError.MirrorBanned, "Mirror is unavailable");
 
     public static RezkaException NotFound() => new(RezkaError.NotFound, "Title not found on the site");
+
+    /// <summary>Сайт ответил, но ссылку на поток не отдал ("url": false).</summary>
+    public static RezkaException StreamUnavailable() =>
+        new(RezkaError.StreamUnavailable, "Site returned no stream url (url:false)");
 
     /// <summary>Пароль нельзя отправлять по http: зеркало обязано быть https.</summary>
     public static RezkaException InsecureMirror() =>
