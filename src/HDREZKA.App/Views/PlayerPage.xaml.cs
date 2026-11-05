@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using HDREZKA.App.Services;
 using HDREZKA.Core.Api;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -124,6 +126,13 @@ public sealed partial class PlayerPage : Page
     /// </summary>
     private readonly DispatcherTimer _cursorTimer = new() { Interval = TimeSpan.FromMilliseconds(120) };
     private bool _cursorHidden;
+
+    // WinUI управляет курсором через UIElement.ProtectedCursor (protected),
+    // поэтому дергаем его рефлексией. Disposed-курсор WinUI не рисует.
+    private static readonly PropertyInfo? ProtectedCursorProp =
+        typeof(UIElement).GetProperty("ProtectedCursor", BindingFlags.Instance | BindingFlags.NonPublic);
+
+    private InputSystemCursor? _arrowInputCursor;
     private IntPtr _cursorProcPtr;
     private CursorWndProc? _cursorWndProc;
     private Window? _cursorHookedWindow;
@@ -2102,6 +2111,7 @@ public sealed partial class PlayerPage : Page
         // Полноэкранный презентер может создать новые дочерние окна —
         // доцепляем хук и к ним.
         EnsureCursorHook();
+        HideWinUiCursor();
         try { SetCursor(HiddenCursor); } catch { }
         _cursorTimer.Start();
 
@@ -2112,8 +2122,53 @@ public sealed partial class PlayerPage : Page
         }
 
         var wmBefore = Volatile.Read(ref _wmSetCursorCount);
-        Log.Info($"[Player] cursor hidden (hooks={_cursorOldProcs.Count}, invisibleCursor={(HiddenCursor != IntPtr.Zero)})");
+        Log.Info($"[Player] cursor hidden (hooks={_cursorOldProcs.Count}, invisibleCursor={(HiddenCursor != IntPtr.Zero)}, protectedCursor={ProtectedCursorProp != null})");
         _ = LogCursorDiagnosticsAsync(wmBefore);
+    }
+
+    /// <summary>
+    /// Основной механизм для WinUI: назначаем ProtectedCursor и сразу
+    /// уничтожаем его — WinUI перестаёт рисовать курсор над элементом.
+    /// Win32 SetCursor здесь бесполезен: WinUI переустанавливает свой курсор
+    /// на каждом обновлении указателя, в обход WM_SETCURSOR.
+    /// </summary>
+    private void HideWinUiCursor()
+    {
+        if (ProtectedCursorProp == null) return;
+
+        try
+        {
+            var hidden = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
+            SetProtectedCursor(hidden);
+            hidden.Dispose(); // уничтоженный курсор не рисуется
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+    }
+
+    private void ShowWinUiCursor()
+    {
+        if (ProtectedCursorProp == null) return;
+
+        try
+        {
+            _arrowInputCursor ??= InputSystemCursor.Create(InputSystemCursorShape.Arrow);
+            SetProtectedCursor(_arrowInputCursor);
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
+        }
+    }
+
+    private void SetProtectedCursor(InputCursor? cursor)
+    {
+        foreach (var element in new UIElement[] { RootGrid, PlayerElement, TapCatcher, TopBar, BottomBar })
+        {
+            try { ProtectedCursorProp!.SetValue(element, cursor); } catch { }
+        }
     }
 
     /// <summary>
@@ -2146,6 +2201,7 @@ public sealed partial class PlayerPage : Page
         var wasHidden = _cursorHidden;
         _cursorHidden = false;
         _cursorTimer.Stop();
+        ShowWinUiCursor();
         try { SetCursor(ArrowCursor); } catch { }
 
         if (_cursorOldProcs.Count == 0)
