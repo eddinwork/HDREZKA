@@ -514,7 +514,17 @@ public static class Parsers
                     var pad = b64.Length % 4;
                     if (pad == 2) b64 += "==";
                     else if (pad == 3) b64 += "=";
-                    link = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(b64));
+                    var decoded = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(b64));
+
+                    // Сайт кладёт в base64 адрес, закодированный ещё и percent-
+                    // кодированием: "https%3A%2F%2Fwww.imdb.com%2Ftitle%2F...".
+                    // Без раскодирования ссылка не открывалась в браузере.
+                    var url = Uri.UnescapeDataString(decoded);
+                    if (Uri.TryCreate(url, UriKind.Absolute, out var uri)
+                        && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+                    {
+                        link = url;
+                    }
                 }
                 catch
                 {

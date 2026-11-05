@@ -540,6 +540,23 @@ public sealed partial class DetailsPage : Page
             });
         }
 
+        // IMDb / Кинопоиск: сайт отдаёт прямые ссылки — открываем в браузере.
+        if (Uri.TryCreate(rating.Link, UriKind.Absolute, out var linkUri)
+            && (linkUri.Scheme == Uri.UriSchemeHttp || linkUri.Scheme == Uri.UriSchemeHttps))
+        {
+            var open = new HyperlinkButton
+            {
+                Content = new FontIcon { Glyph = "\uE8A7", FontSize = 11 },
+                NavigateUri = linkUri,
+                Padding = new Thickness(2, 0, 0, 0),
+                MinWidth = 0,
+                MinHeight = 0,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            ToolTipService.SetToolTip(open, Loc.Get("Details.OpenRating", label));
+            stack.Children.Add(open);
+        }
+
         border.Child = stack;
         RatingsPanel.Children.Add(border);
     }
