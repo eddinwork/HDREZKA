@@ -80,8 +80,16 @@ public sealed partial class PlayerPage : Page
             }
             else if (!playing && _displayActive)
             {
-                _displayRequest?.RequestRelease();
                 _displayActive = false;
+                try
+                {
+                    _displayRequest?.RequestRelease();
+                }
+                catch (InvalidOperationException)
+                {
+                    // Запрос уже снят системой (сон/блокировка экрана) —
+                    // RequestRelease в таком состоянии бросает исключение.
+                }
             }
         }
         catch (Exception ex)
@@ -116,11 +124,12 @@ public sealed partial class PlayerPage : Page
     /// </summary>
     private readonly DispatcherTimer _cursorTimer = new() { Interval = TimeSpan.FromMilliseconds(120) };
     private bool _cursorHidden;
-    private IntPtr _cursorHookedHwnd;
-    private IntPtr _oldWndProc;
     private IntPtr _cursorProcPtr;
     private CursorWndProc? _cursorWndProc;
     private Window? _cursorHookedWindow;
+    private readonly Dictionary<IntPtr, IntPtr> _cursorOldProcs = new();
+    private readonly object _cursorLock = new();
+    private int _lastCursorHookCount;
     private DateTime _lastSiteSave = DateTime.MinValue;
     private bool _isFullscreen;
     private Windows.Graphics.RectInt32 _savedBounds;
@@ -142,7 +151,7 @@ public sealed partial class PlayerPage : Page
         {
             if (_cursorHidden)
             {
-                try { SetCursor(IntPtr.Zero); } catch { }
+                try { SetCursor(HiddenCursor); } catch { }
             }
         };
         Loaded += (_, _) =>
@@ -151,7 +160,9 @@ public sealed partial class PlayerPage : Page
             // Re-apply after activation: SetTitleBar may not stick
             // when called pre-activation from OnNavigatedTo.
             ApplyWindowChrome();
-            HookCursor();
+            // HostWindow назначается уже после Navigate, поэтому хук ставим
+            // ещё и следующим тиком — когда окно плеера точно известно.
+            DispatcherQueue.TryEnqueue(EnsureCursorHook);
             ReturnFocus();
         };
 
@@ -1834,23 +1845,117 @@ public sealed partial class PlayerPage : Page
 
     private delegate IntPtr CursorWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
     private const int WmSetCursor = 0x0020;
     private const int GwlWndProc = -4;
     private const int IdcArrow = 32512;
 
     private static readonly IntPtr ArrowCursor = LoadCursor(IntPtr.Zero, new IntPtr(IdcArrow));
 
+    private static IntPtr _invisibleCursor;
+    private static bool _invisibleCursorTried;
+    private int _wmSetCursorCount;
+
+    /// <summary>
+    /// Полностью прозрачный курсор 1×1 (AND=1 — экран не менять, XOR=0 —
+    /// не рисовать). WinUI иногда игнорирует SetCursor(NULL), поэтому
+    /// используем настоящий невидимый курсор.
+    /// </summary>
+    private static IntPtr HiddenCursor
+    {
+        get
+        {
+            if (_invisibleCursor != IntPtr.Zero || _invisibleCursorTried) return _invisibleCursor;
+            _invisibleCursorTried = true;
+
+            try
+            {
+                var andMask = new byte[8];
+                for (var i = 0; i < andMask.Length; i++) andMask[i] = 0xFF;
+                var xorMask = new byte[8];
+
+                var andPtr = Marshal.AllocHGlobal(andMask.Length);
+                var xorPtr = Marshal.AllocHGlobal(xorMask.Length);
+                try
+                {
+                    Marshal.Copy(andMask, 0, andPtr, andMask.Length);
+                    Marshal.Copy(xorMask, 0, xorPtr, xorMask.Length);
+
+                    var info = new IconInfo
+                    {
+                        fIcon = false,
+                        xHotspot = 0,
+                        yHotspot = 0,
+                        hbmMask = CreateBitmap(1, 1, 1, 1, andPtr),
+                        hbmColor = CreateBitmap(1, 1, 1, 1, xorPtr),
+                    };
+                    _invisibleCursor = CreateIconIndirect(ref info);
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(andPtr);
+                    Marshal.FreeHGlobal(xorPtr);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.TryLog(ex);
+            }
+
+            return _invisibleCursor;
+        }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetCursor(IntPtr hCursor);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr CreateIconIndirect(ref IconInfo info);
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateBitmap(int width, int height, uint planes, uint bitsPerPixel, IntPtr bits);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorInfo(ref CursorInfo ci);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IconInfo
+    {
+        [MarshalAs(UnmanagedType.Bool)] public bool fIcon;
+        public int xHotspot;
+        public int yHotspot;
+        public IntPtr hbmMask;
+        public IntPtr hbmColor;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CursorPoint
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CursorInfo
+    {
+        public int cbSize;
+        public int flags;
+        public IntPtr hCursor;
+        public CursorPoint ptScreenPos;
+    }
+
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
     private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
-
-    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
-    private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
 
     [DllImport("user32.dll", EntryPoint = "CallWindowProcW")]
     private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
+    [DllImport("user32.dll", EntryPoint = "DefWindowProcW")]
+    private static extern IntPtr DefWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
     [DllImport("user32.dll")]
-    private static extern IntPtr SetCursor(IntPtr hCursor);
+    private static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "LoadCursorW")]
     private static extern IntPtr LoadCursor(IntPtr hInstance, IntPtr lpCursorName);
@@ -1863,10 +1968,17 @@ public sealed partial class PlayerPage : Page
     /// заново ставит стрелку, и счётчиковый ShowCursor не помогает — курсор
     /// остаётся на экране (именно на это жаловались пользователи).
     /// </summary>
-    private void HookCursor()
+    private void HookCursor() => EnsureCursorHook();
+
+    /// <summary>
+    /// Вешает хук на окно плеера и все его дочерние окна. В WinUI 3 контент
+    /// живёт в дочернем окне (DesktopChildSiteBridge), и WM_SETCURSOR приходит
+    /// именно ему — хук только на верхнем окне не срабатывал, поэтому курсор
+    /// и оставался на экране.
+    /// </summary>
+    private void EnsureCursorHook()
     {
-        if (_cursorWndProc != null) return;
-        var window = Host;
+        var window = HostWindow;
         if (window == null) return;
 
         try
@@ -1874,18 +1986,27 @@ public sealed partial class PlayerPage : Page
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
             if (hwnd == IntPtr.Zero) return;
 
-            var proc = new CursorWndProc(CursorWindowProc);
-            var procPtr = Marshal.GetFunctionPointerForDelegate(proc);
-            var old = SetWindowLongPtr(hwnd, GwlWndProc, procPtr);
-            if (old == IntPtr.Zero) return;
+            if (_cursorWndProc == null || _cursorHookedWindow != window)
+            {
+                UnhookCursor();
+                _cursorWndProc = new CursorWndProc(CursorWindowProc);
+                _cursorProcPtr = Marshal.GetFunctionPointerForDelegate(_cursorWndProc);
+                _cursorHookedWindow = window;
+                window.Activated += OnHostWindowActivated;
+            }
 
-            _cursorWndProc = proc;
-            _cursorProcPtr = procPtr;
-            _oldWndProc = old;
-            _cursorHookedHwnd = hwnd;
-            _cursorHookedWindow = window;
-            window.Activated += OnHostWindowActivated;
-            Log.Info("[Player] cursor hook installed");
+            HookWindow(hwnd);
+            EnumChildWindows(hwnd, (child, _) =>
+            {
+                HookWindow(child);
+                return true;
+            }, IntPtr.Zero);
+
+            if (_cursorOldProcs.Count != _lastCursorHookCount)
+            {
+                _lastCursorHookCount = _cursorOldProcs.Count;
+                Log.Info($"[Player] cursor hooks: {_cursorOldProcs.Count} window(s)");
+            }
         }
         catch (Exception ex)
         {
@@ -1893,35 +2014,15 @@ public sealed partial class PlayerPage : Page
         }
     }
 
-    /// <summary>
-    /// Проверяет, что наш хук всё ещё стоит (WinUI переустанавливает оконную
-    /// процедуру при смене презентера) и при необходимости вешает заново.
-    /// </summary>
-    private void EnsureCursorHook()
+    private void HookWindow(IntPtr hwnd)
     {
-        if (_cursorWndProc == null)
+        lock (_cursorLock)
         {
-            HookCursor();
-            return;
-        }
+            if (_cursorOldProcs.ContainsKey(hwnd)) return;
 
-        var window = HostWindow;
-        if (window == null || _cursorHookedHwnd == IntPtr.Zero) return;
-
-        try
-        {
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
-            if (hwnd == IntPtr.Zero) return;
-
-            if (GetWindowLongPtr(hwnd, GwlWndProc) == _cursorProcPtr) return;
-
-            _oldWndProc = SetWindowLongPtr(hwnd, GwlWndProc, _cursorProcPtr);
-            _cursorHookedHwnd = hwnd;
-            Log.Info("[Player] cursor hook re-installed");
-        }
-        catch (Exception ex)
-        {
-            App.TryLog(ex);
+            var old = SetWindowLongPtr(hwnd, GwlWndProc, _cursorProcPtr);
+            if (old == IntPtr.Zero) return;
+            _cursorOldProcs[hwnd] = old;
         }
     }
 
@@ -1929,9 +2030,14 @@ public sealed partial class PlayerPage : Page
     {
         try
         {
-            if (_cursorHookedHwnd != IntPtr.Zero && _oldWndProc != IntPtr.Zero)
+            lock (_cursorLock)
             {
-                SetWindowLongPtr(_cursorHookedHwnd, GwlWndProc, _oldWndProc);
+                foreach (var (hwnd, oldProc) in _cursorOldProcs)
+                {
+                    try { SetWindowLongPtr(hwnd, GwlWndProc, oldProc); } catch { }
+                }
+
+                _cursorOldProcs.Clear();
             }
         }
         catch (Exception ex)
@@ -1946,10 +2052,9 @@ public sealed partial class PlayerPage : Page
                 _cursorHookedWindow = null;
             }
 
-            _cursorHookedHwnd = IntPtr.Zero;
-            _oldWndProc = IntPtr.Zero;
             _cursorProcPtr = IntPtr.Zero;
             _cursorWndProc = null;
+            _lastCursorHookCount = 0;
         }
     }
 
@@ -1968,41 +2073,87 @@ public sealed partial class PlayerPage : Page
 
     private IntPtr CursorWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
-        if (msg == WmSetCursor && _cursorHidden)
+        if (msg == WmSetCursor)
         {
-            SetCursor(IntPtr.Zero);
-            return new IntPtr(1); // обработано: стрелку не ставим
+            Interlocked.Increment(ref _wmSetCursorCount);
+            if (_cursorHidden)
+            {
+                SetCursor(HiddenCursor);
+                return new IntPtr(1); // обработано: стрелку не ставим
+            }
         }
 
-        return CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam);
+        IntPtr oldProc;
+        lock (_cursorLock)
+        {
+            _cursorOldProcs.TryGetValue(hWnd, out oldProc);
+        }
+
+        return oldProc != IntPtr.Zero
+            ? CallWindowProc(oldProc, hWnd, msg, wParam, lParam)
+            : DefWindowProc(hWnd, msg, wParam, lParam);
     }
 
     private void HideSystemCursor()
     {
+        if (_cursorHidden) return;
         _cursorHidden = true;
-        try { SetCursor(IntPtr.Zero); } catch { }
 
-        if (_cursorWndProc == null)
+        // Полноэкранный презентер может создать новые дочерние окна —
+        // доцепляем хук и к ним.
+        EnsureCursorHook();
+        try { SetCursor(HiddenCursor); } catch { }
+        _cursorTimer.Start();
+
+        if (_cursorOldProcs.Count == 0)
         {
             // Хук не встал — остаётся старый счётчиковый способ.
             try { for (var i = 0; i < 16 && ShowCursor(false) >= 0; i++) { } } catch { }
         }
-        else
+
+        var wmBefore = Volatile.Read(ref _wmSetCursorCount);
+        Log.Info($"[Player] cursor hidden (hooks={_cursorOldProcs.Count}, invisibleCursor={(HiddenCursor != IntPtr.Zero)})");
+        _ = LogCursorDiagnosticsAsync(wmBefore);
+    }
+
+    /// <summary>
+    /// Через секунду после скрытия пишет в лог реальное состояние курсора:
+    /// виден ли он системе и приходят ли WM_SETCURSOR. По этим строкам видно,
+    /// перебивает ли WinUI нашу установку курсора.
+    /// </summary>
+    private async Task LogCursorDiagnosticsAsync(int wmBefore)
+    {
+        try
         {
-            _cursorTimer.Start();
+            await Task.Delay(1200);
+            if (!_cursorHidden) return;
+
+            var info = new CursorInfo { cbSize = Marshal.SizeOf<CursorInfo>() };
+            var ok = GetCursorInfo(ref info);
+            Log.Info($"[Player] cursor diag: showing={ok && info.flags == 1} " +
+                     $"handle=0x{info.hCursor.ToInt64():X} " +
+                     $"wmSetCursor={Volatile.Read(ref _wmSetCursorCount) - wmBefore} " +
+                     $"hooks={_cursorOldProcs.Count}");
+        }
+        catch (Exception ex)
+        {
+            App.TryLog(ex);
         }
     }
 
     private void ShowSystemCursor()
     {
+        var wasHidden = _cursorHidden;
         _cursorHidden = false;
         _cursorTimer.Stop();
         try { SetCursor(ArrowCursor); } catch { }
 
-        if (_cursorWndProc == null)
+        if (_cursorOldProcs.Count == 0)
         {
             try { for (var i = 0; i < 16 && ShowCursor(true) < 0; i++) { } } catch { }
         }
+
+        if (wasHidden) Log.Info("[Player] cursor shown");
     }
 
     private void ToggleFullscreen()
