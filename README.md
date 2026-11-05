@@ -2,7 +2,7 @@
 
 Неофициальный клиент HDRezka для Windows: каталог фильмов, сериалов, мультфильмов и аниме, онлайн-просмотр, закладки, история, комментарии и оценки.
 
-![version](https://img.shields.io/badge/version-1.8.3-blue) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-lightgrey) ![license](https://img.shields.io/badge/license-MIT-green) ![downloads](https://img.shields.io/github/downloads/eddinwork/HDREZKA/total)
+![version](https://img.shields.io/badge/version-1.8.4-blue) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-lightgrey) ![license](https://img.shields.io/badge/license-MIT-green) ![downloads](https://img.shields.io/github/downloads/eddinwork/HDREZKA/total)
 
 ## Контакты для связи:
 - Группа в Telegram: https://t.me/hdrezkawin
@@ -24,6 +24,11 @@
 - **Оценки** — голосование за фильмы и сериалы (1–10)
 - **Аккаунт** — вход, профиль, выход
 - **Персонализация** — тема (системная/светлая/тёмная), язык (русский/English/українська), размер постеров, блоки главной (порядок и видимость), зеркало сайта с автоматическим подбором (с учётом региона)
+
+## Что нового в 1.8.4
+
+- Убрали назойливую подсказку «Влево», которая появлялась при наведении на плеер в оконном режиме: WinUI показывал подсказку горячих клавиш на всей площади страницы. Горячие клавиши работают как раньше.
+- Проверили, что перехват курсора в полноэкранном режиме не мешает управлению: кнопки, стрелки и `F` работают.
 
 ## Что нового в 1.8.3
 
@@ -83,9 +88,9 @@
 
 ## Установка
 
-Вариант 1 — установщик: скачайте `HDREZKA-Setup-1.8.3.exe` из раздела [Releases](../../releases), запустите и укажите папку. Ярлыки появятся в меню «Пуск» (и на рабочем столе — опционально).
+Вариант 1 — установщик: скачайте `HDREZKA-Setup-1.8.4.exe` из раздела [Releases](../../releases), запустите и укажите папку. Ярлыки появятся в меню «Пуск» (и на рабочем столе — опционально).
 
-Вариант 2 — portable: скачайте `HDREZKA-1.8.3-portable-win-x64.zip`, распакуйте и запустите `HDREZKA.App.exe`. Настройки хранятся в `%AppData%/HDREZKA`.
+Вариант 2 — portable: скачайте `HDREZKA-1.8.4-portable-win-x64.zip`, распакуйте и запустите `HDREZKA.App.exe`. Настройки хранятся в `%AppData%/HDREZKA`.
 
 ## Частые вопросы
 

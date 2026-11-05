@@ -9,20 +9,6 @@
     Background="Black"
     RequestedTheme="Dark">
 
-    <!-- Global shortcuts: work regardless of which control has focus -->
-    <Page.KeyboardAccelerators>
-        <KeyboardAccelerator Key="Left" Invoked="SeekBackInvoked"/>
-        <KeyboardAccelerator Key="Right" Invoked="SeekForwardInvoked"/>
-        <KeyboardAccelerator Key="Space" Invoked="PlayPauseInvoked"/>
-        <KeyboardAccelerator Key="F" Invoked="FullscreenInvoked"/>
-        <KeyboardAccelerator Key="Escape" Invoked="EscapeInvoked"/>
-        <KeyboardAccelerator Key="N" Invoked="NextInvoked"/>
-        <KeyboardAccelerator Key="P" Invoked="PrevInvoked"/>
-        <KeyboardAccelerator Key="Up" Invoked="VolumeUpInvoked"/>
-        <KeyboardAccelerator Key="Down" Invoked="VolumeDownInvoked"/>
-        <KeyboardAccelerator Key="M" Invoked="MuteInvoked"/>
-    </Page.KeyboardAccelerators>
-
     <Grid x:Name="RootGrid"
           Background="Black"
           IsTabStop="True"
@@ -74,6 +60,30 @@
                 </VisualState>
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
+
+        <!--
+            Глобальные горячие клавиши. Держим их на невидимом элементе, а не на
+            Page: WinUI автоматически показывает подсказку с первой клавишей
+            ("Влево") при наведении на элемент-владелец ускорителей, и на Page
+            это была вся площадь плеера. На элементе 0×0 подсказку не вызвать.
+        -->
+        <Grid x:Name="AcceleratorHost"
+              Width="0" Height="0"
+              IsHitTestVisible="False"
+              HorizontalAlignment="Left" VerticalAlignment="Top">
+            <Grid.KeyboardAccelerators>
+                <KeyboardAccelerator Key="Left" Invoked="SeekBackInvoked"/>
+                <KeyboardAccelerator Key="Right" Invoked="SeekForwardInvoked"/>
+                <KeyboardAccelerator Key="Space" Invoked="PlayPauseInvoked"/>
+                <KeyboardAccelerator Key="F" Invoked="FullscreenInvoked"/>
+                <KeyboardAccelerator Key="Escape" Invoked="EscapeInvoked"/>
+                <KeyboardAccelerator Key="N" Invoked="NextInvoked"/>
+                <KeyboardAccelerator Key="P" Invoked="PrevInvoked"/>
+                <KeyboardAccelerator Key="Up" Invoked="VolumeUpInvoked"/>
+                <KeyboardAccelerator Key="Down" Invoked="VolumeDownInvoked"/>
+                <KeyboardAccelerator Key="M" Invoked="MuteInvoked"/>
+            </Grid.KeyboardAccelerators>
+        </Grid>
 
         <Border Background="Black" BorderThickness="0" Margin="0" Padding="0"/>
 
